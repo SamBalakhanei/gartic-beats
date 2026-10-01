@@ -1,7 +1,11 @@
-import { instruments, TOTAL_STEPS } from './pattern'
-import type { Instrument, Pattern } from './pattern'
-import { synthesizeDrum } from './sounds'
-import { DEFAULT_BPM, normalizeBpm, StepClock } from './tempo'
+import { voiceBytes } from './voice.ts'
+import type { Song } from '../game/types'
+import { clipTiming, DEFAULT_MIX, songVocals } from './arrangement.ts'
+import type { Mix, VocalClip } from './arrangement.ts'
+import { instruments, TOTAL_STEPS } from './pattern.ts'
+import type { Instrument, Pattern } from './pattern.ts'
+import { synthesizeDrum } from './sounds.ts'
+import { DEFAULT_BPM, normalizeBpm, StepClock } from './tempo.ts'
 
 // Schedule against the audio clock, not animation frames. The short lookahead
 // keeps timing steady while letting edits take effect during playback.
@@ -16,6 +20,11 @@ export class DrumMachine {
   private disposed = false
   private volume = 0.65
   private bpm = DEFAULT_BPM
+  private beatBus: GainNode | null = null
+  private voiceBus: GainNode | null = null
+  private mix: Mix = { ...DEFAULT_MIX }
+  private vocals: VocalClip[] = []
+  private vocalGains = new Map<string, Set<GainNode>>()
   private pattern: Pattern
   private onStep: (step: number) => void
   private onPlaying: (playing: boolean) => void
@@ -29,6 +38,23 @@ export class DrumMachine {
   setPattern(pattern: Pattern) { this.pattern = pattern }
 
   setBpm(bpm: number) { this.bpm = normalizeBpm(bpm, this.bpm) }
+
+  setMix(mix: Mix, vocals = this.vocals) {
+    this.mix = mix
+    this.vocals = vocals
+    if (!this.context) return
+    this.beatBus?.gain.setTargetAtTime(mix.beat, this.context.currentTime, 0.015)
+    this.voiceBus?.gain.setTargetAtTime(mix.voice, this.context.currentTime, 0.015)
+    for (const clip of vocals) for (const gain of this.vocalGains.get(clip.id) ?? []) gain.gain.setTargetAtTime(clip.volume, this.context.currentTime, 0.015)
+  }
+
+  setSong(song: Song) {
+    this.setPattern(song.pattern)
+    this.setBpm(song.bpm)
+    this.setMix(song.mix ?? DEFAULT_MIX, songVocals(song))
+  }
+
+  async prepare() { await this.ready() }
 
   setVolume(volume: number) {
     this.volume = volume
@@ -44,6 +70,12 @@ export class DrumMachine {
       this.context = new AudioContext()
       this.output = this.context.createGain()
       this.output.gain.value = this.volume * 0.5
+      this.beatBus = this.context.createGain()
+      this.voiceBus = this.context.createGain()
+      this.beatBus.gain.value = this.mix.beat
+      this.voiceBus.gain.value = this.mix.voice
+      this.beatBus.connect(this.output)
+      this.voiceBus.connect(this.output)
       // Tame peaks when several of the eight voices overlap.
       const compressor = this.context.createDynamicsCompressor()
       compressor.threshold.value = -8
@@ -74,7 +106,7 @@ export class DrumMachine {
   private hit(id: Instrument, at: number) {
     const source = this.context!.createBufferSource()
     source.buffer = this.buffers.get(id)!
-    source.connect(this.output!)
+    source.connect(this.beatBus!)
     this.sources.add(source)
     source.onended = () => { source.disconnect(); this.sources.delete(source) }
     source.start(at)
@@ -86,14 +118,40 @@ export class DrumMachine {
     if (!this.disposed && generation === this.generation) this.hit(id, context.currentTime)
   }
 
-  async start() {
+  async start(song?: Song) {
     this.stop()
+    if (song) this.setSong(song)
     const generation = this.generation
     const context = await this.ready()
     if (this.disposed || generation !== this.generation || document.hidden) return
-    const clock = new StepClock(context.currentTime + 0.04, TOTAL_STEPS)
+    const buffers = new Map<string, AudioBuffer>()
+    await Promise.all(this.vocals.map(async clip => {
+      buffers.set(clip.id, await context.decodeAudioData(voiceBytes(clip.voice.data).buffer as ArrayBuffer))
+    }))
+    if (this.disposed || generation !== this.generation || document.hidden) return
+    const origin = context.currentTime + 0.04
+    const clock = new StepClock(origin, TOTAL_STEPS)
+    const playClip = (clip: VocalClip, at: number) => {
+      const buffer = buffers.get(clip.id)
+      if (!buffer) return
+      const source = context.createBufferSource()
+      const gain = context.createGain()
+      const timing = clipTiming(clip, this.bpm)
+      source.buffer = buffer
+      source.playbackRate.value = timing.rate
+      gain.gain.value = clip.volume
+      source.connect(gain); gain.connect(this.voiceBus!)
+      const gains = this.vocalGains.get(clip.id) ?? new Set<GainNode>()
+      gains.add(gain); this.vocalGains.set(clip.id, gains)
+      this.sources.add(source)
+      source.onended = () => { source.disconnect(); gain.disconnect(); gains.delete(gain); this.sources.delete(source) }
+      source.start(at, timing.offset)
+      // The four-bar arrangement repeats; trim any tail at its right edge.
+      source.stop(at + timing.audibleSeconds)
+    }
     const schedule = () => {
       for (const { at, step } of clock.schedule(context.currentTime, this.bpm)) {
+        for (const clip of this.vocals) if (Math.floor(clip.startStep) === step) playClip(clip, at + (clip.startStep % 1) * 15 / this.bpm)
         for (const { id } of instruments) {
           if (this.pattern[id][step]) this.hit(id, at)
         }
@@ -109,6 +167,7 @@ export class DrumMachine {
     this.timer = setInterval(schedule, 25)
     this.onPlaying(true)
     animate()
+    return performance.now() + (origin - context.currentTime) * 1000
   }
 
   stop() {
@@ -118,6 +177,7 @@ export class DrumMachine {
     cancelAnimationFrame(this.frame)
     for (const source of this.sources) { source.stop(); source.disconnect() }
     this.sources.clear()
+    this.vocalGains.clear()
     this.onStep(-1)
     this.onPlaying(false)
   }

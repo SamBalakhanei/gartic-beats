@@ -75,8 +75,9 @@ A localhost invite works on this computer only. Do not send it to friends on oth
 2. Every player writes and submits a prompt (1–240 characters). There is no prompt timer yet.
 3. When all prompts are ready, each player receives someone else's prompt and a blank studio. The shared song deadline is fixed at 10 minutes. Each prompt is used once.
 4. Edit the rhythm and BPM. Each edit is sent to the server; **All changes saved** means the server acknowledged it. Refreshing restores the latest saved draft and the same assignment/deadline. Editing pauses while disconnected.
-5. **Submit song** locks the song and waits for the remaining players. When everyone submits, or the deadline passes, all players see the results.
-6. Play a song beside its creator's name. The prompt and prompt author are shown; switching tracks stops the previous one. Empty songs are identified explicitly.
+5. **Record voice** captures a vocal take over one loop (headphones recommended). Preview with **Play song**, add up to four layers, or select a take to replace or delete. A completed, non-silent recording is required for manual submission.
+6. **Submit song** locks the song and waits for the remaining players. When everyone submits, or the deadline passes, all players see the results.
+7. Play a song beside its creator's name. The prompt and prompt author are shown; switching tracks stops the previous one. Empty songs are identified explicitly.
 
 The server owns phase transitions, deadlines, assignments, and validation. Other prompts and songs are not sent to players before results. Deadline submissions use the last server-saved draft; no browser tab needs to stay active for the deadline to fire. Unsent edits during a connection failure cannot be recovered by the server.
 
@@ -106,3 +107,16 @@ Each has four distinct bars. They keep your selected tempo on the existing step 
 The engine schedules sounds slightly ahead against `AudioContext.currentTime`, following the [Web Audio sequencing approach](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Advanced_techniques). Edits affect future steps; a sound already queued within the next 100 ms may still play. Tempo changes take effect as subsequent notes are scheduled; the next already-planned step retains its timestamp. Playback restarts from bar 1. Audio context cleanup handles page/component teardown.
 
 For manual checks, test playback, stop/restart, volume at zero, all three presets, undo after clearing, each bar, and a narrow phone viewport. Automated pattern checks do not verify audible output or browser-specific audio behavior.
+
+
+## Voice recording
+
+Microphone access is requested only when Record voice is pressed. Takes are converted to mono 16 kHz PCM WAV, stored in the current room's memory with the song, and revealed only with results. Recording lasts one loop (4–24 seconds), or can be stopped early; early takes are padded with silence. Re-recording keeps the previous take until a replacement succeeds. A silent take is rejected, but the app does not attempt speech recognition or judge the lyrics.
+
+The microphone is released after stopping, cancelling, hiding/leaving the page, or the turn ending. Permission denial and unsupported browsers show an error. A recording still being processed at the deadline is not included: results use the last completed server-saved take. Beat-only timeout results are explicitly labeled.
+
+Changing beat BPM keeps every recording. Each vocal layer has an independent sample BPM: increasing it raises both speed and pitch, with a **2× chipmunk** shortcut. Pitch-preserving time stretching is not implemented. Timing changes restart playback from the beginning; volume changes are live.
+
+Record beside the BPM control, in either the sandbox or a game. Up to four vocal layers can overlap. Select a timeline lane to edit its name, sample BPM, volume, and start position. Drag a clip to move it, or drag either edge to trim the audio without changing pitch. Snap rounds edits to the step grid; turn it off or hold Shift for fine placement. Arrow keys move a focused clip or trim handle, Escape cancels a drag, and Undo reverses one complete gesture. Reset trim restores the original source range. Edits preview while dragging and save on release. Each clip plays once per four-bar loop; tails beyond the last bar are cut off. Recording a new layer plays the current mix for reference; use headphones to avoid recording speaker audio.
+
+The mixer saves separate beat and voice levels, plus each layer's own volume. Drafts save after a short 200 ms pause in editing; manual submission sends the complete current song. Reconnecting restores these settings, and the post-game player uses the same audio engine and mix. Sandbox changes last for the current page session. Audio remains in server memory and is lost when the server restarts.

@@ -1,3 +1,4 @@
+import { DEFAULT_MIX, songVocals } from '../music/arrangement'
 import { useEffect, useRef, useState } from 'react'
 import Studio from '../Studio'
 import { DrumMachine } from '../music/DrumMachine'
@@ -16,6 +17,8 @@ export default function GameScreen({ game, connected, pending, notice, savedRevi
   const [seconds, setSeconds] = useState(600)
   const [revision, setRevision] = useState(0)
   const revisionRef = useRef(savedRevision)
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => clearTimeout(draftTimer.current), [game.phase])
   const localDeadline = useRef<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { heading.current?.focus() }, [game.phase])
@@ -39,9 +42,11 @@ export default function GameScreen({ game, connected, pending, notice, savedRevi
       saveStatus: mine.submitted ? 'Submitted — your song is locked in.' : !connected ? 'Offline — editing paused until you reconnect.' : seconds === 0 ? 'Time is up. Opening results…' : revision > savedRevision ? 'Saving…' : 'All changes saved.',
       onSongChange: (song: Song) => {
         const next = ++revisionRef.current
-        if (saveDraft({ gameId: game.id, song, revision: next })) setRevision(next)
+        setRevision(next)
+        clearTimeout(draftTimer.current)
+        draftTimer.current = setTimeout(() => saveDraft({ gameId: game.id, song, revision: next }), 200)
       },
-      onSubmit: song => send('submit_song', { gameId: game.id, song }),
+      onSubmit: song => { clearTimeout(draftTimer.current); send('submit_song', { gameId: game.id, song }) },
     }} />
   }
 
@@ -77,11 +82,13 @@ function Results({ game }: { game: GameView }) {
       <div className="card-heading"><h2>{result.name}</h2><button className="play-button" disabled={starting} aria-label={`${playing && selected === result.playerId ? 'Stop' : 'Play'} ${result.name}’s song`} onClick={async () => {
         if (playing && selected === result.playerId) { engine.current?.stop(); return }
         setStarting(true); setError(''); setSelected(result.playerId)
-        try { engine.current?.setPattern(result.song.pattern); engine.current?.setBpm(result.song.bpm); await engine.current?.start() }
+        try { engine.current?.setPattern(result.song.pattern); engine.current?.setBpm(result.song.bpm); await engine.current?.start(result.song) }
         catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to play this song.') }
         finally { setStarting(false) }
       }}>{playing && selected === result.playerId ? 'Stop' : 'Play'}</button></div>
-      <blockquote>“{result.prompt}”</blockquote><p className="card-note">Prompt by {result.promptAuthor} · {result.song.bpm} BPM{result.automatic ? ' · Saved automatically' : ''}</p>
+      <blockquote>“{result.prompt}”</blockquote>
+      <p className="card-note">{songVocals(result.song).length} vocal layers · Beat {Math.round((result.song.mix ?? DEFAULT_MIX).beat * 100)}% · Voice {Math.round((result.song.mix ?? DEFAULT_MIX).voice * 100)}%</p>
+      {!songVocals(result.song).length && <p className="card-note">Beat only — no completed voice take was saved.</p>}<p className="card-note">Prompt by {result.promptAuthor} · {result.song.bpm} BPM{result.automatic ? ' · Saved automatically' : ''}</p>
       {!Object.values(result.song.pattern).some(track => track.some(Boolean)) && <p className="card-note">No notes were added to this song.</p>}
     </article>)}
     {error && <p role="alert" className="error">{error}</p>}

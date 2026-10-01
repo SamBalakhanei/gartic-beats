@@ -1,3 +1,4 @@
+import { withVoice } from './test-voice.mjs'
 import { emptyPattern } from '../src/music/pattern.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -178,7 +179,11 @@ test('full round keeps assignments private, restores saved drafts, then reveals 
   const late = await connect()
   late.send({ type: 'join', roomId: created.room.id, name: 'Too late' })
   assert.equal((await late.next('error')).code, 'in_progress')
-  const song = { pattern: emptyPattern(), bpm: 93 }
+  const voice = withVoice({ bpm: 93 }).voice
+  const song = { pattern: emptyPattern(), bpm: 93, mix: { beat: 0.35, voice: 0.9 }, vocals: [
+    { id: 'lead', name: 'Lead', voice, bpm: 186, startStep: 0.5, volume: 0.8, trimStart: 0.25, trimEnd: 4 },
+    { id: 'harmony', name: 'Harmony', voice, bpm: 93, startStep: 16, volume: 0.5 },
+  ] }
   song.pattern.tom[17] = true
   guest.send({ type: 'draft', gameId, song, revision: 1 })
   assert.equal((await guest.next('draft_saved')).revision, 1)
@@ -190,7 +195,7 @@ test('full round keeps assignments private, restores saved drafts, then reveals 
   assert.deepEqual(resumed.room.game.mine.song, song)
   assert.equal(resumed.room.game.mine.prompt, 'Host secret prompt')
   assert.equal(resumed.room.game.deadline, guestView.room.game.deadline)
-  host.send({ type: 'submit_song', gameId, song: { pattern: emptyPattern(), bpm: 120 } })
+  host.send({ type: 'submit_song', gameId, song: withVoice({ pattern: emptyPattern(), bpm: 120 }) })
   await host.next('ack')
   const waiting = await host.next('room', message => message.room.game?.mine?.submitted)
   assert.equal(waiting.room.game.phase, 'music')
@@ -235,7 +240,7 @@ test('a departed prompt writer gets a fallback and cannot block the remaining pl
   const music = await round.host.next('room', message => message.room.game?.phase === 'music')
   assert.ok(music.room.game.mine.prompt)
   assert.equal(music.room.game.completed, 1)
-  round.host.send({ type: 'submit_song', gameId: round.gameId, song: { pattern: emptyPattern(), bpm: 120 } })
+  round.host.send({ type: 'submit_song', gameId: round.gameId, song: withVoice({ pattern: emptyPattern(), bpm: 120 }) })
   await round.host.next('ack')
   await round.host.next('room', message => message.room.game?.phase === 'results')
 })

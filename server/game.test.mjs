@@ -1,3 +1,4 @@
+import { withVoice } from './test-voice.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createGame, submitPrompt, saveSong, gameView, validateSong, finishIfReady } from './game.ts'
@@ -36,4 +37,32 @@ test('prompt and song validation reject malformed input and do not mutate saved 
   assert.equal(game.phase, 'results')
   finishIfReady(game, 700000)
   assert.equal(gameView(game, 'a', 700000).results.length, 2)
+})
+
+
+test('manual submission requires a voice track while deadline fallback accepts beat-only drafts', () => {
+  const game = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }])
+  submitPrompt(game, 'a', 'First', 0); submitPrompt(game, 'b', 'Second', 0)
+  const song = { bpm: 120, pattern: emptyPattern() }
+  saveSong(game, 'a', song, false, 100)
+  assert.throws(() => saveSong(game, 'a', song, true, 100), /voice/)
+  saveSong(game, 'a', withVoice(song), true, 100)
+  finishIfReady(game, 600000)
+  const results = gameView(game, 'a', 600000).results
+  assert.ok(results[0].song.voice)
+  assert.equal(results[1].song.voice, undefined)
+  assert.equal(results[1].automatic, true)
+})
+
+test('tempo changes preserve the original take and its recording tempo through save and reveal', () => {
+  const game = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }])
+  submitPrompt(game, 'a', 'First', 0); submitPrompt(game, 'b', 'Second', 0)
+  const original = withVoice({ bpm: 120, pattern: emptyPattern() })
+  const changed = { ...original, bpm: 80 }
+  saveSong(game, 'a', changed, true, 100)
+  finishIfReady(game, 600000)
+  const result = gameView(game, 'a', 600000).results[0]
+  assert.equal(result.song.bpm, 80)
+  assert.equal(result.song.voice.bpm, 120)
+  assert.equal(result.song.voice.data, original.voice.data)
 })

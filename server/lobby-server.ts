@@ -15,7 +15,7 @@ type Room = { id: string; hostId: string; players: Member[]; game?: Game; gameTi
 export function attachLobbyServer(server: EventEmitter, graceMs = 30_000, musicDuration = MUSIC_DURATION_MS) {
   const rooms = new Map<string, Room>()
   const membership = new Map<WebSocket, { room: Room; player: Member }>()
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 16384 })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 4_300_000 })
   let closed = false
   const send = (socket: WebSocket, message: ServerMessage) => {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))

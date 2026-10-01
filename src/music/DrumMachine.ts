@@ -1,3 +1,5 @@
+import { emptyPiano, noteMidi, synthesizePiano } from './piano.ts'
+import type { PianoTrack, PianoNote } from './piano.ts'
 import { voiceBytes } from './voice.ts'
 import type { Song } from '../game/types'
 import { clipTiming, DEFAULT_MIX, songVocals } from './arrangement.ts'
@@ -20,6 +22,9 @@ export class DrumMachine {
   private disposed = false
   private volume = 0.65
   private bpm = DEFAULT_BPM
+  private piano: PianoTrack = emptyPiano()
+  private pianoBus: GainNode | null = null
+  private pianoBuffers = new Map<string, AudioBuffer>()
   private beatBus: GainNode | null = null
   private voiceBus: GainNode | null = null
   private mix: Mix = { ...DEFAULT_MIX }
@@ -49,6 +54,8 @@ export class DrumMachine {
   }
 
   setSong(song: Song) {
+    this.piano = song.piano ?? emptyPiano()
+    if (this.context) this.pianoBus?.gain.setTargetAtTime(this.piano.volume, this.context.currentTime, 0.015)
     this.setPattern(song.pattern)
     this.setBpm(song.bpm)
     this.setMix(song.mix ?? DEFAULT_MIX, songVocals(song))
@@ -76,6 +83,9 @@ export class DrumMachine {
       this.voiceBus.gain.value = this.mix.voice
       this.beatBus.connect(this.output)
       this.voiceBus.connect(this.output)
+      this.pianoBus = this.context.createGain()
+      this.pianoBus.gain.value = this.piano.volume
+      this.pianoBus.connect(this.output)
       // Tame peaks when several of the eight voices overlap.
       const compressor = this.context.createDynamicsCompressor()
       compressor.threshold.value = -8
@@ -110,6 +120,34 @@ export class DrumMachine {
     this.sources.add(source)
     source.onended = () => { source.disconnect(); this.sources.delete(source) }
     source.start(at)
+  }
+
+  private pianoHit(note: PianoNote, at: number, preview = false) {
+    const context = this.context!
+    const midi = noteMidi(this.piano, note.degree)
+    const remaining = (64 - note.start) * 15 / this.bpm
+    const gate = Math.min(note.length * 15 / this.bpm * 0.9, remaining)
+    const key = `${midi}:${gate}:${this.piano.warmth}`
+    let buffer = this.pianoBuffers.get(key)
+    if (!buffer) {
+      const samples = synthesizePiano(midi, context.sampleRate, gate, this.piano.warmth)
+      buffer = context.createBuffer(1, samples.length, context.sampleRate)
+      buffer.getChannelData(0).set(samples)
+      if (this.pianoBuffers.size >= 128) this.pianoBuffers.clear()
+      this.pianoBuffers.set(key, buffer)
+    }
+    const source = context.createBufferSource(), gain = context.createGain()
+    source.buffer = buffer; gain.gain.value = note.velocity * 0.75
+    source.connect(gain); gain.connect(this.pianoBus!)
+    this.sources.add(source)
+    source.onended = () => { source.disconnect(); gain.disconnect(); this.sources.delete(source) }
+    source.start(at)
+    if (!preview) source.stop(at + Math.min(buffer.duration, remaining - (note.start % 2 ? this.piano.swing * 15 / this.bpm : 0)))
+  }
+  async previewPiano(degree: number) {
+    const generation = this.generation
+    const context = await this.ready()
+    if (!this.disposed && generation === this.generation) this.pianoHit({ id: 'preview', degree, start: 0, length: 4, velocity: 0.8 }, context.currentTime, true)
   }
 
   async preview(id: Instrument) {
@@ -151,6 +189,7 @@ export class DrumMachine {
     }
     const schedule = () => {
       for (const { at, step } of clock.schedule(context.currentTime, this.bpm)) {
+        for (const note of this.piano.notes) if (note.start === step) this.pianoHit(note, at + (step % 2 ? this.piano.swing * 15 / this.bpm : 0))
         for (const clip of this.vocals) if (Math.floor(clip.startStep) === step) playClip(clip, at + (clip.startStep % 1) * 15 / this.bpm)
         for (const { id } of instruments) {
           if (this.pattern[id][step]) this.hit(id, at)

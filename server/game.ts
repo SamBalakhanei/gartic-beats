@@ -1,3 +1,4 @@
+import { validatePiano } from '../src/music/piano.ts'
 import { MAX_VOCAL_LAYERS, MIN_SAMPLE_BPM, MAX_SAMPLE_BPM, songVocals } from '../src/music/arrangement.ts'
 import { validateVoice } from '../src/music/voice.ts'
 import { randomInt, randomUUID } from 'node:crypto'
@@ -47,7 +48,7 @@ export function submitPrompt(game: Game, id: string, text: unknown, now: number,
 
 export function validateSong(value: unknown): Song {
   if (!value || typeof value !== 'object') throw new Error('Invalid song.')
-  const { pattern, bpm, voice, mix, vocals } = value as Partial<Song>
+  const { pattern, bpm, voice, mix, vocals, piano } = value as Partial<Song>
   if (typeof bpm !== 'number' || !Number.isInteger(bpm) || bpm < MIN_BPM || bpm > MAX_BPM || !pattern || typeof pattern !== 'object') throw new Error('Invalid song tempo or pattern.')
   const clean = emptyPattern()
   for (const { id } of instruments) {
@@ -67,7 +68,7 @@ export function validateSong(value: unknown): Song {
     ids.add(clip.id)
     return { id: clip.id, name: clip.name.trim(), voice: track, bpm: clip.bpm, startStep: clip.startStep, volume: clip.volume, ...(clip.trimStart !== undefined ? { trimStart: start } : {}), ...(clip.trimEnd !== undefined ? { trimEnd: end } : {}) }
   })
-  return { bpm, pattern: clean, ...(mix ? { mix: { beat: mix.beat, voice: mix.voice } } : {}), ...(validatedVocals ? { vocals: validatedVocals } : {}), ...(voice && !validatedVocals ? { voice: validateVoice(voice) } : {}) }
+  return { bpm, pattern: clean, ...(piano !== undefined ? { piano: validatePiano(piano) } : {}), ...(mix ? { mix: { beat: mix.beat, voice: mix.voice } } : {}), ...(validatedVocals ? { vocals: validatedVocals } : {}), ...(voice && !validatedVocals ? { voice: validateVoice(voice) } : {}) }
 }
 
 export function saveSong(game: Game, id: string, value: unknown, submit: boolean, now: number) {

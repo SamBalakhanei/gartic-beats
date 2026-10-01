@@ -278,3 +278,79 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
 .is-editing .clip-body { cursor: grabbing; }
 .clip-edit-readout { position: absolute; right: 4px; top: -20px; padding: 3px 7px; border-radius: 4px; background: #0d0e16; color: white; font-size: 11px; z-index: 2; pointer-events: none; }
 @media (pointer: coarse) { .trim-handle { width: 18px; } .editable-region { min-width: 40px; } }
+
+/* One editor at a time keeps the studio within a compact workspace. */
+.studio-app { padding-top: 18px; }
+.studio-app [hidden] { display: none !important; }
+.studio-brief { margin: 16px 0; }
+.studio-brief .eyebrow { display: none; }
+.studio-brief h1 { font-size: 1.4rem; }
+.studio-prompt { margin: 0; font-size: .85rem; }
+.studio-transport { margin-bottom: 10px; padding: 12px; gap: 12px; }
+.studio-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.studio-tabs button, .piano-editor button:not(.piano-cell):not(.piano-note-body):not(.piano-note-edge), .piano-editor select, .piano-editor input[type=number] { border: 1px solid #515260; background: #292a37; color: #eeecf7; border-radius: 6px; min-height: 36px; padding: 6px 10px; font: inherit; }
+.studio-tabs button { min-width: 95px; text-align: left; }
+.studio-tabs small { display: block; font-size: .7rem; margin-top: 3px; color: #b9b8cb; }
+.studio-tabs button[aria-pressed=true], .piano-bars button[aria-pressed=true] { background: #bba4ff !important; color: #231a38 !important; border-color: #bba4ff !important; }
+.studio-tabs button[aria-pressed=true] small { color: #40315e; }
+.studio-tabs .studio-undo { margin-left: auto; min-width: 0; text-align: center; }
+.piano-editor { padding: 14px; background: #1e1f2a; border: 1px solid #3b3c4b; border-radius: 12px; font-size: .8rem; }
+.piano-toolbar, .chord-stamps, .piano-note-tools, .piano-phrase-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.piano-toolbar label, .chord-stamps label, .piano-note-tools label { display: flex; align-items: center; gap: 6px; color: #c6c4d6; }
+.piano-bars { margin-left: auto; display: flex; gap: 4px; }
+.piano-bars .sounding { box-shadow: inset 0 -3px #c2ff8a; }
+.chord-stamps { margin: 12px 0; }
+.chord-stamps > span { color: #bba4ff; }
+.piano-scroll { overflow-x: auto; padding: 3px; }
+.piano-roll { min-width: 540px; }
+.piano-ruler { display: grid; grid-template-columns: 52px 1fr; color: #b9b8cb; padding: 0 0 5px; font-size: .7rem; }
+.piano-ruler > div { display: grid; grid-template-columns: repeat(16, 1fr); text-align: center; }
+.piano-body { display: grid; grid-template-columns: 52px 1fr; }
+.piano-keys { display: grid; grid-template-rows: repeat(8, 34px); }
+.piano-keys button { border-radius: 3px 0 0 3px !important; min-height: 0 !important; font-size: .72rem !important; background: #e8e3f2 !important; color: #302541 !important; border-color: #9991aa !important; padding: 0 !important; }
+.piano-grid { position: relative; display: grid; grid-template-columns: repeat(16, 1fr); grid-template-rows: repeat(8, 34px); }
+.piano-cell { padding: 0; border: 0; border-right: 1px solid #333443; border-bottom: 1px solid #333443; border-radius: 0; background: #181923; min-width: 0; }
+.piano-cell:nth-child(32n + 17), .piano-cell:nth-child(32n + 18), .piano-cell:nth-child(32n + 19), .piano-cell:nth-child(32n + 20) { background: #1c1d29; }
+.piano-cell.beat-line { border-left: 1px solid #616171; }
+.piano-cell:hover { background: #343046; }
+.piano-note { position: absolute; height: 32px; min-width: 0; border: 1px solid #e1d2ff; background: #bba4ff; border-radius: 4px; display: flex; z-index: 1; overflow: hidden; }
+.piano-note.selected { box-shadow: inset 0 0 0 2px white; }
+.piano-note-body { flex: 1; min-width: 0; background: none; border: 0; color: #271c3c; padding: 0 3px; font-size: .65rem; font-weight: 650; cursor: grab; touch-action: none; user-select: none; overflow: hidden; }
+.piano-note-edge { width: 10px; flex-shrink: 0; padding: 0; border: 0; border-left: 1px solid #37224b55; background: #ffffff25; color: #382449; cursor: ew-resize; touch-action: none; }
+.piano-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #c2ff8a; z-index: 2; pointer-events: none; }
+.piano-note-tools { min-height: 42px; margin: 8px 0; color: #c6c4d6; }
+.piano-note-tools input[type=number] { width: 55px; }
+.piano-note-tools input[type=range] { width: 80px; }
+.piano-feel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; border-top: 1px solid #3b3c4b; padding-top: 8px; }
+.piano-feel label { display: grid; gap: 4px; color: #c6c4d6; }
+.piano-editor input[type=range] { min-height: 26px; max-width: 100%; accent-color: #bba4ff; }
+.piano-phrase-actions { margin-top: 8px; }
+.studio-app .page-footer { margin-top: 14px; }
+.studio-sidebar .mix-level { margin: 12px 18px; }
+.studio-app .track { padding: 5px 0; }
+.studio-app .beat-label { margin-bottom: 3px; }
+@media (max-width: 1100px) {
+  .studio-sidebar { grid-row: auto; grid-template-columns: 1fr; gap: 0; }
+  .studio-sidebar .mixer-panel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .studio-sidebar .mixer-panel .panel-title, .studio-sidebar .mixer-panel .panel-hint { grid-column: 1 / -1; }
+  .studio-sidebar .mixer-panel .panel-hint { display: none; }
+  .studio-sidebar .mixer-panel .panel-title { padding: 8px 12px; }
+}
+@media (max-width: 760px) {
+  .studio-app { padding: 12px; }
+  .studio-brief { margin: 12px 0; gap: 6px; }
+  .studio-brief h1 { font-size: 1.2rem; }
+  .studio-transport { padding: 10px; gap: 8px; }
+  .studio-transport .play-button { min-width: 120px; }
+  .record-destination { max-width: 140px; }
+  .studio-tabs button { min-width: 0; flex: 1; font-size: .8rem; }
+  .studio-tabs .studio-undo { flex: 0 0 auto; }
+  .piano-editor { padding: 10px; }
+  .piano-toolbar { gap: 6px; }
+  .piano-bars { width: 100%; margin-left: 0; }
+  .piano-bars button { flex: 1; }
+  .piano-feel { gap: 8px; }
+  .piano-note-tools { font-size: .75rem; }
+  .studio-sidebar .mix-level { margin: 10px; }
+}
+select:focus-visible { outline: 3px solid #f4f2ff; outline-offset: 3px; }

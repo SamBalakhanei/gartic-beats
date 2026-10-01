@@ -1,3 +1,6 @@
+import PianoEditor from './music/PianoEditor'
+import { emptyPiano } from './music/piano'
+import type { PianoTrack } from './music/piano'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import VoiceRecorder from './music/VoiceRecorder'
@@ -11,7 +14,7 @@ import type { Instrument, Preset } from './music/pattern'
 import { DEFAULT_MIX, MAX_VOCAL_LAYERS, MIN_SAMPLE_BPM, MAX_SAMPLE_BPM, songVocals } from './music/arrangement'
 import type { VocalClip, Mix } from './music/arrangement'
 
-type Arrangement = Song & { mix: Mix; vocals: VocalClip[] }
+type Arrangement = Song & { piano: PianoTrack; mix: Mix; vocals: VocalClip[] }
 type GameStudio = {
   initialSong: Song; prompt: string; disabled: boolean; toolbar: ReactNode; saveStatus: string
   onSongChange: (song: Song) => void; onSubmit: (song: Song) => void
@@ -24,7 +27,7 @@ export default function Studio({ active, hasLobby, game }: { active: boolean; ha
   const titleId = useId()
   const [song, setSong] = useState<Arrangement>(() => {
     const initial = game?.initialSong ?? { pattern: createPreset('soul'), bpm: DEFAULT_BPM }
-    return { pattern: initial.pattern, bpm: initial.bpm, mix: initial.mix ?? { ...DEFAULT_MIX }, vocals: songVocals(initial) }
+    return { piano: initial.piano ?? emptyPiano(), pattern: initial.pattern, bpm: initial.bpm, mix: initial.mix ?? { ...DEFAULT_MIX }, vocals: songVocals(initial) }
   })
   const songRef = useRef(song)
   const history = useRef<Arrangement[]>([])
@@ -32,6 +35,7 @@ export default function Studio({ active, hasLobby, game }: { active: boolean; ha
   const titleRef = useRef<HTMLHeadingElement>(null)
   const [selected, setSelected] = useState<string | null>(song.vocals[0]?.id ?? null)
   const [recordTarget, setRecordTarget] = useState('new')
+  const [panel, setPanel] = useState<'piano' | 'drums' | 'vocals'>('piano')
   const [snap, setSnap] = useState(true)
   const [bar, setBar] = useState(0)
   const [playing, setPlaying] = useState(false)
@@ -83,7 +87,7 @@ export default function Studio({ active, hasLobby, game }: { active: boolean; ha
     const id = replacement?.id ?? crypto.randomUUID()
     const clip = replacement ? { ...replacement, voice, bpm: voice.bpm, trimStart: undefined, trimEnd: undefined } : { id, name: `Voice ${current.vocals.length + 1}`, voice, bpm: voice.bpm, startStep: 0, volume: 1 }
     apply({ ...current, vocals: replacement ? current.vocals.map(item => item.id === id ? clip : item) : [...current.vocals, clip] }, 'Take added. Select its lane to shape the sample.')
-    setSelected(id)
+    setSelected(id); setPanel('vocals')
   }
   async function preview(id: Instrument) {
     try { await machine.current?.preview(id) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to preview.') }
@@ -103,10 +107,15 @@ export default function Studio({ active, hasLobby, game }: { active: boolean; ha
       <label className="record-destination">Record into<select value={targetClip ? recordTarget : 'new'} disabled={locked} onChange={event => setRecordTarget(event.target.value)}><option value="new">New vocal layer</option>{song.vocals.map(clip => <option value={clip.id} key={clip.id}>Replace {clip.name}</option>)}</select></label>
       {game && <div className="transport-submit"><button className="secondary-button" disabled={locked || !song.vocals.length} onClick={() => game.onSubmit(songRef.current)}>Submit song</button><span role="status">{game.saveStatus}</span></div>}
     </div>
-    <div className="studio-workspace">
+    <div className="studio-tabs" role="group" aria-label="Choose instrument editor">
+      {(['piano', 'drums', 'vocals'] as const).map(tab => <button key={tab} aria-pressed={panel === tab} onClick={() => setPanel(tab)}>{tab === 'piano' ? '♫ Piano' : tab === 'drums' ? '▦ Drums' : '● Vocals'}<small>{tab === 'piano' ? `${song.piano.notes.length} notes` : tab === 'drums' ? `${notes} hits` : `${song.vocals.length} layers`}</small></button>)}
+      <button className="studio-undo" onClick={undo} disabled={locked || history.current.length === 0}>Undo edit</button>
+    </div>
+    <div className={`studio-workspace panel-${panel}`}>
       <div className="arrangement-main">
         <fieldset className="studio-controls" disabled={locked}>
-          <section className="arrangement-panel" aria-label="Song timeline">
+          {panel === 'piano' && <PianoEditor track={song.piano} disabled={locked} step={step} onChange={(piano, message) => apply({ ...songRef.current, piano }, message)} onPreview={degree => { void machine.current?.previewPiano(degree).catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to preview piano.')) }} />}
+          <section hidden={panel !== 'vocals'} className="arrangement-panel" aria-label="Song timeline">
             <div className="panel-title"><h2>Arrangement</h2><button className="snap-toggle" aria-pressed={snap} onClick={() => setSnap(!snap)}>Snap {snap ? 'on' : 'off'}</button><span>{song.vocals.length} / {MAX_VOCAL_LAYERS} vocal layers</span></div>
             <div className="timeline-scroll"><div className="timeline">
               <div className="timeline-ruler"><span>4-bar loop</span><div>{Array.from({ length: 16 }, (_, i) => <span key={i}>{i % 4 === 0 ? `Bar ${i / 4 + 1}` : '·'}</span>)}</div></div>
@@ -116,7 +125,7 @@ export default function Studio({ active, hasLobby, game }: { active: boolean; ha
             </div></div>
             <p className="panel-hint">Drag a clip to move it. Drag either edge to trim. Hold Shift for fine placement. Arrow keys nudge; Escape cancels a drag.</p>
           </section>
-          <section className="editor" aria-label="Drum editor"><div className="panel-title"><h2>Drum sequencer</h2><span>Tap squares to make a beat</span></div>
+          <section hidden={panel !== 'drums'} className="editor" aria-label="Drum editor"><div className="panel-title"><h2>Drum sequencer</h2><span>Tap squares to make a beat</span></div>
         <div className="bar-toolbar">
           <div className="bar-buttons" role="group" aria-label="Choose a bar to edit">
             {Array.from({ length: BARS }, (_, index) => (
@@ -164,23 +173,23 @@ export default function Studio({ active, hasLobby, game }: { active: boolean; ha
         <div className="editor-footer">
           <p><span className="legend-square" aria-hidden="true" /> Lit squares make a sound. Tap an instrument to hear it.</p>
           <div className="edit-actions">
-            <button onClick={undo} disabled={history.current.length === 0}>Undo edit</button>
             <button onClick={() => apply({ ...songRef.current, pattern: clearBar(songRef.current.pattern, bar) }, `Bar ${bar + 1} cleared. Undo brings it back.`)} disabled={barIsEmpty}>Clear bar</button>
             <button onClick={() => apply({ ...songRef.current, pattern: emptyPattern() }, 'Beat cleared. Start fresh, or undo to bring it back.')} disabled={notes === 0}>Clear all</button>
           </div>
         </div>
 
           </section>
-          <section className="studio-presets"><span>Starting grooves</span>{presets.map(({ id, label }) => <button className="secondary-button" key={id} onClick={() => apply({ ...songRef.current, pattern: createPreset(id) }, `${label} loaded. Your vocal layers and mix are kept.`)}>{label}</button>)}</section>
+          <section hidden={panel !== 'drums'} className="studio-presets"><span>Starting grooves</span>{presets.map(({ id, label }) => <button className="secondary-button" key={id} onClick={() => apply({ ...songRef.current, pattern: createPreset(id) }, `${label} loaded. Your vocal layers and mix are kept.`)}>{label}</button>)}</section>
         </fieldset>
       </div>
       <aside className="studio-sidebar">
         <fieldset disabled={locked} className="mixer-panel"><div className="panel-title"><h2>Song mix</h2><span>Saved with your song</span></div>
           <Level label="Beat volume" value={song.mix.beat} onChange={beat => apply({ ...songRef.current, mix: { ...songRef.current.mix, beat } }, 'Beat volume saved in your mix.')} />
+          <Level label="Piano volume" value={song.piano.volume} onChange={volume => apply({ ...songRef.current, piano: { ...songRef.current.piano, volume } }, 'Piano volume saved.')} />
           <Level label="Voice volume" value={song.mix.voice} onChange={voice => apply({ ...songRef.current, mix: { ...songRef.current.mix, voice } }, 'Voice volume saved in your mix.')} />
           <p className="panel-hint">Everyone hears these levels in the results.</p>
         </fieldset>
-        <fieldset disabled={locked} className="clip-inspector"><div className="panel-title"><h2>Vocal sample</h2></div>
+        <fieldset hidden={panel !== 'vocals'} disabled={locked} className="clip-inspector"><div className="panel-title"><h2>Vocal sample</h2></div>
           {selectedClip ? <>
             <label className="sample-name">Name<input aria-label="Vocal layer name" value={selectedClip.name} maxLength={32} onChange={event => editClip(selectedClip.id, { name: event.target.value || 'Voice' })} /></label>
             <NumberControl label="Sample BPM" value={selectedClip.bpm} min={MIN_SAMPLE_BPM} max={MAX_SAMPLE_BPM} onChange={bpm => editClip(selectedClip.id, { bpm })} />

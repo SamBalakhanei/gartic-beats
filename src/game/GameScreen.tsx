@@ -87,9 +87,9 @@ function Results({ game }: { game: GameView }) {
         finally { setStarting(false) }
       }}>{playing && selected === result.playerId ? 'Stop' : 'Play'}</button></div>
       <blockquote>“{result.prompt}”</blockquote>
-      <p className="card-note">{songVocals(result.song).length} vocal layers · Beat {Math.round((result.song.mix ?? DEFAULT_MIX).beat * 100)}% · Voice {Math.round((result.song.mix ?? DEFAULT_MIX).voice * 100)}%</p>
-      {!songVocals(result.song).length && <p className="card-note">Beat only — no completed voice take was saved.</p>}<p className="card-note">Prompt by {result.promptAuthor} · {result.song.bpm} BPM{result.automatic ? ' · Saved automatically' : ''}</p>
-      {!Object.values(result.song.pattern).some(track => track.some(Boolean)) && <p className="card-note">No notes were added to this song.</p>}
+      <p className="card-note">{songVocals(result.song).length} vocal layers · {result.song.piano?.notes.length ?? 0} piano notes · Piano {Math.round((result.song.piano?.volume ?? 0.65) * 100)}% · Beat {Math.round((result.song.mix ?? DEFAULT_MIX).beat * 100)}% · Voice {Math.round((result.song.mix ?? DEFAULT_MIX).voice * 100)}%</p>
+      {!songVocals(result.song).length && <p className="card-note">Instrumental — no completed voice take was saved.</p>}<p className="card-note">Prompt by {result.promptAuthor} · {result.song.bpm} BPM{result.automatic ? ' · Saved automatically' : ''}</p>
+      {!result.song.piano?.notes.length && !songVocals(result.song).length && !Object.values(result.song.pattern).some(track => track.some(Boolean)) && <p className="card-note">No notes were added to this song.</p>}
     </article>)}
     {error && <p role="alert" className="error">{error}</p>}
   </div>

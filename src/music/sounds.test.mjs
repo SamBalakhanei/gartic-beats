@@ -30,3 +30,13 @@ test('open hi-hat rings substantially longer than the closed hi-hat', () => {
   const tail = open.slice(closed.length)
   assert.ok(tail.some(value => Math.abs(value) > 0.01))
 })
+
+test('saved songs rebuild the exact same kit for studio and results playback', () => {
+  for (const { id } of instruments) assert.deepEqual(synthesizeDrum(id, 48000), synthesizeDrum(id, 48000), id)
+})
+
+test('hats leave headroom beneath the kick and snare', () => {
+  const peak = id => synthesizeDrum(id, 48000).reduce((max, sample) => Math.max(max, Math.abs(sample)), 0)
+  assert.ok(peak('hat') < peak('snare') * 0.5)
+  assert.ok(peak('openHat') < peak('kick') * 0.5)
+})

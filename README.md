@@ -7,7 +7,7 @@ A browser party game where friends turn silly prompts into music, then reinterpr
 A home screen, live local lobbies, and drum sandbox built with React, TypeScript, Vite, and the browser Web Audio API.
 
 - Eight synthesized sounds: kick, snare, closed hi-hat, clap, open hi-hat, low tom, rimshot, and cowbell. No audio downloads.
-- Four bars of 16 steps at 120 BPM: an eight-second loop.
+- Four bars of 16 steps with an editable tempo from 40–240 BPM (120 by default). The loop duration updates with tempo.
 - Play/stop, volume, sound previews, a playhead, and independent bar selection.
 - Three starter patterns with deliberately sparse percussion, clear bar/all, and undo for the last 20 edits.
 - Keyboard-accessible buttons and a stacked beat layout on small screens.
@@ -72,7 +72,7 @@ A localhost invite works on this computer only. Do not send it to friends on oth
 1. From home, choose **Go to Sandbox**, then press **Play beat** to hear the initial Soul Chop pattern. Audio starts only after an interaction.
 2. Tap squares to change the rhythm while it plays. The white outline shows the current step; the bar indicator shows the current playback bar.
 3. Select another bar to edit it. Bar selection does not jump playback.
-4. Tap an instrument name to preview its sound. Adjust Volume as needed.
+4. Tap an instrument name to preview its sound. Adjust Volume or BPM as needed. Tempo changes work during playback without restarting the loop; the playhead follows the scheduled audio. Clear/preset/undo actions edit notes only and keep your chosen tempo.
 5. Try a starter, Clear bar, or Clear all, then Undo to recover the previous pattern.
 6. Switching away from the tab stops playback; press Play again when you return.
 
@@ -84,10 +84,10 @@ These original drum sketches explore the soulful-to-industrial range of the proj
 - **Stadium Glow:** full backbeats, layered claps, open hats, and a closing tom fill.
 - **Industrial Stomp:** clustered kicks, metallic accents, and deliberate empty space.
 
-Each has four distinct bars. They use the existing fixed 120 BPM grid and synthesized kit; they do not yet include sample chops, pitched instruments, swing timing, or distortion. They are original patterns, not transcriptions of songs.
+Each has four distinct bars. They keep your selected tempo on the existing step grid and synthesized kit; they do not yet include sample chops, pitched instruments, swing timing, or distortion. They are original patterns, not transcriptions of songs.
 
 ## Playback notes
 
-The engine schedules sounds slightly ahead against `AudioContext.currentTime`, following the [Web Audio sequencing approach](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Advanced_techniques). Edits affect future steps; a sound already queued within the next 100 ms may still play. Playback restarts from bar 1. Audio context cleanup handles page/component teardown.
+The engine schedules sounds slightly ahead against `AudioContext.currentTime`, following the [Web Audio sequencing approach](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Advanced_techniques). Edits affect future steps; a sound already queued within the next 100 ms may still play. Tempo changes take effect as subsequent notes are scheduled; the next already-planned step retains its timestamp. Playback restarts from bar 1. Audio context cleanup handles page/component teardown.
 
 For manual checks, test playback, stop/restart, volume at zero, all three presets, undo after clearing, each bar, and a narrow phone viewport. Automated pattern checks do not verify audible output or browser-specific audio behavior.

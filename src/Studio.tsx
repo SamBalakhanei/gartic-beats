@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { DrumMachine } from './music/DrumMachine'
-import { BARS, BPM, STEPS_PER_BAR, clearBar, createPreset, emptyPattern, instruments, toggleStep } from './music/pattern'
+import { DEFAULT_BPM, MIN_BPM, MAX_BPM, normalizeBpm, stepSeconds } from './music/tempo'
+import { BARS, TOTAL_STEPS, STEPS_PER_BAR, clearBar, createPreset, emptyPattern, instruments, toggleStep } from './music/pattern'
 import type { Instrument, Pattern, Preset } from './music/pattern'
 
 const presets: { id: Preset; label: string; description: string }[] = [
@@ -21,6 +22,8 @@ export default function Studio({ active, hasLobby }: { active: boolean; hasLobby
   const [starting, setStarting] = useState(false)
   const [step, setStep] = useState(-1)
   const [volume, setVolume] = useState(65)
+  const [bpm, setBpm] = useState(DEFAULT_BPM)
+  const [bpmInput, setBpmInput] = useState(String(DEFAULT_BPM))
   const [error, setError] = useState('')
   const [message, setMessage] = useState('Soul Chop loaded. Make it your own.')
 
@@ -45,6 +48,13 @@ export default function Studio({ active, hasLobby }: { active: boolean; hasLobby
     if (!active) machine.current?.stop()
     else titleRef.current?.focus()
   }, [active])
+
+  function changeTempo(value: number) {
+    const next = normalizeBpm(value, bpm)
+    setBpm(next)
+    setBpmInput(String(next))
+    machine.current?.setBpm(next)
+  }
 
   function apply(next: Pattern, description: string, remember = true) {
     if (remember) history.current = [...history.current.slice(-19), patternRef.current]
@@ -103,7 +113,22 @@ export default function Studio({ active, hasLobby }: { active: boolean; hasLobby
             <button className={`play-button ${playing ? 'is-playing' : ''}`} disabled={starting} onClick={() => void togglePlayback()}>
               <span aria-hidden="true">{playing ? '■' : '▶'}</span> {starting ? 'Starting…' : playing ? 'Stop' : 'Play beat'}
             </button>
-            <div className="timing"><strong>{BPM} BPM</strong><span>4 bars · 8-second loop</span></div>
+            <div className="timing">
+              <label className="tempo-control">BPM <input aria-label="BPM" type="number" inputMode="numeric" min={MIN_BPM} max={MAX_BPM} step="1" value={bpmInput}
+                onChange={event => {
+                  setBpmInput(event.target.value)
+                  const value = event.target.valueAsNumber
+                  if (Number.isInteger(value) && value >= MIN_BPM && value <= MAX_BPM) {
+                    setBpm(value)
+                    machine.current?.setBpm(value)
+                  }
+                }}
+                onBlur={event => changeTempo(event.target.valueAsNumber)}
+                onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }}
+                aria-describedby="tempo-help" /></label>
+              <span>4 bars · {Number((TOTAL_STEPS * stepSeconds(bpm)).toFixed(1))}-second loop</span>
+              <span id="tempo-help">{MIN_BPM}–{MAX_BPM} · Change while playing</span>
+            </div>
           </div>
           <label className="volume">Volume <input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={event => {
             const value = Number(event.target.value)

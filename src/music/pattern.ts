@@ -1,8 +1,6 @@
-export const BPM = 120
 export const BARS = 4
 export const STEPS_PER_BAR = 16
 export const TOTAL_STEPS = BARS * STEPS_PER_BAR
-export const STEP_SECONDS = 60 / BPM / 4
 
 export const instruments = [
   { id: 'kick', name: 'Kick', hint: 'The heartbeat', color: '#c2ff8a' },

@@ -1,9 +1,10 @@
 import test from 'node:test'
+import { DEFAULT_BPM, stepSeconds } from './tempo.ts'
 import assert from 'node:assert/strict'
-import { BARS, TOTAL_STEPS, STEP_SECONDS, instruments, emptyPattern, toggleStep, clearBar, createPreset } from './pattern.ts'
+import { BARS, TOTAL_STEPS, instruments, emptyPattern, toggleStep, clearBar, createPreset } from './pattern.ts'
 
 test('every starter is a four-bar, eight-second loop with independent instrument tracks', () => {
-  assert.equal(TOTAL_STEPS * STEP_SECONDS, 8)
+  assert.equal(TOTAL_STEPS * stepSeconds(DEFAULT_BPM), 8)
   for (const preset of ['soul', 'stadium', 'industrial']) {
     const pattern = createPreset(preset)
     for (const { id } of instruments) {

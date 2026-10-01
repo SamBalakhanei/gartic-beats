@@ -155,3 +155,6 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
 
 .invite-label { display: block; margin: 18px 0 10px; font-size: 0.875rem; }
 .player-connection { display: block; margin-top: 4px; color: #b9b8cb; font-size: 0.75rem; }
+
+.tempo-control { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 700; }
+.tempo-control input { width: 86px; min-height: 44px; padding: 8px 10px; color: #f3f2f8; background: #14151d; border: 1px solid #555665; border-radius: 7px; font-variant-numeric: tabular-nums; }

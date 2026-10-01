@@ -1,6 +1,7 @@
-import { instruments, STEP_SECONDS, TOTAL_STEPS } from './pattern'
+import { instruments, TOTAL_STEPS } from './pattern'
 import type { Instrument, Pattern } from './pattern'
 import { synthesizeDrum } from './sounds'
+import { DEFAULT_BPM, normalizeBpm, StepClock } from './tempo'
 
 // Schedule against the audio clock, not animation frames. The short lookahead
 // keeps timing steady while letting edits take effect during playback.
@@ -14,6 +15,7 @@ export class DrumMachine {
   private generation = 0
   private disposed = false
   private volume = 0.65
+  private bpm = DEFAULT_BPM
   private pattern: Pattern
   private onStep: (step: number) => void
   private onPlaying: (playing: boolean) => void
@@ -25,6 +27,8 @@ export class DrumMachine {
   }
 
   setPattern(pattern: Pattern) { this.pattern = pattern }
+
+  setBpm(bpm: number) { this.bpm = normalizeBpm(bpm, this.bpm) }
 
   setVolume(volume: number) {
     this.volume = volume
@@ -87,23 +91,17 @@ export class DrumMachine {
     const generation = this.generation
     const context = await this.ready()
     if (this.disposed || generation !== this.generation || document.hidden) return
-    const origin = context.currentTime + 0.04
-    let next = 0
+    const clock = new StepClock(context.currentTime + 0.04, TOTAL_STEPS)
     const schedule = () => {
-      // Skip overdue steps after a main-thread stall instead of playing a burst.
-      next = Math.max(next, Math.ceil((context.currentTime - origin) / STEP_SECONDS))
-      while (origin + next * STEP_SECONDS < context.currentTime + 0.1) {
-        const step = next % TOTAL_STEPS
+      for (const { at, step } of clock.schedule(context.currentTime, this.bpm)) {
         for (const { id } of instruments) {
-          if (this.pattern[id][step]) this.hit(id, origin + next * STEP_SECONDS)
+          if (this.pattern[id][step]) this.hit(id, at)
         }
-        next++
       }
     }
     let previous = -1
     const animate = () => {
-      const elapsed = context.currentTime - origin
-      const step = elapsed < 0 ? -1 : Math.floor(elapsed / STEP_SECONDS) % TOTAL_STEPS
+      const step = clock.position(context.currentTime)
       if (step !== previous) { this.onStep(step); previous = step }
       this.frame = requestAnimationFrame(animate)
     }

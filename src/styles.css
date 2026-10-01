@@ -158,3 +158,17 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
 
 .tempo-control { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 700; }
 .tempo-control input { width: 86px; min-height: 44px; padding: 8px 10px; color: #f3f2f8; background: #14151d; border: 1px solid #555665; border-radius: 7px; font-variant-numeric: tabular-nums; }
+
+.studio-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.round-toolbar { margin-top: 24px; padding: 20px; border: 1px solid #555665; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; background: #252631; }
+.round-toolbar p { color: #b9b8cb; margin: 8px 0 0; }
+.round-clock { font-size: 2rem; font-weight: 750; color: #c2ff8a; font-variant-numeric: tabular-nums; }
+.song-submit { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 24px; }
+.song-submit p { color: #b9b8cb; }
+.prompt-form { display: grid; gap: 14px; }
+.prompt-form textarea { width: 100%; resize: vertical; background: #14151d; color: #f3f2f8; border: 1px solid #555665; border-radius: 8px; padding: 16px; font: inherit; line-height: 1.6; }
+.prompt-form textarea:focus-visible { outline: 3px solid #bba4ff; outline-offset: 3px; }
+.prompt-form > span { text-align: right; color: #b9b8cb; font-size: 0.875rem; }
+.results-list { display: grid; gap: 18px; }
+.result-card blockquote { margin: 24px 0 12px; padding-left: 16px; border-left: 3px solid #bba4ff; font-size: 1.2rem; line-height: 1.6; overflow-wrap: anywhere; }
+.prompt p { overflow-wrap: anywhere; }

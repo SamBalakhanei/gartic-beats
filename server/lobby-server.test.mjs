@@ -1,3 +1,4 @@
+import { emptyPattern } from '../src/music/pattern.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
@@ -5,9 +6,9 @@ import { once } from 'node:events'
 import { WebSocket } from 'ws'
 import { attachLobbyServer } from './lobby-server.ts'
 
-async function setup(t, grace = 150) {
+async function setup(t, grace = 150, musicDuration) {
   const http = createServer()
-  const lobby = attachLobbyServer(http, grace)
+  const lobby = attachLobbyServer(http, grace, musicDuration)
   const sockets = []
   await new Promise(resolve => http.listen(0, '127.0.0.1', resolve))
   t.after(async () => {
@@ -59,8 +60,8 @@ test('create, join, live rosters, and server-enforced host/minimum rules', async
   guest.send({ type: 'start', playerId: created.session.playerId })
   assert.equal((await guest.next('error')).code, 'host_only')
   host.send({ type: 'start' })
-  await host.next('notice')
-  await guest.next('notice')
+  await host.next('ack')
+  await guest.next('room', message => message.room.game?.phase === 'prompts')
   guest.send({ type: 'leave' })
   await guest.next('left')
   await host.next('room', message => message.room.players.length === 1)
@@ -138,4 +139,103 @@ test('missing/full rooms, invalid names, malformed messages and repeated joins a
   assert.equal((await extra.next('error')).code, 'not_found')
   extra.send({ type: 'join', roomId: created.room.id, name: 'Guest' })
   assert.equal((await extra.next('error')).code, 'full')
+})
+
+
+async function startRound(connect) {
+  const host = await connect()
+  const created = await create(host)
+  const guest = await connect()
+  guest.send({ type: 'join', roomId: created.room.id, name: 'Guest' })
+  const joined = await guest.next('joined')
+  host.send({ type: 'start' })
+  await host.next('ack')
+  const view = await host.next('room', message => message.room.game?.phase === 'prompts')
+  return { host, guest, created, joined, gameId: view.room.game.id }
+}
+
+async function submitBothPrompts(round) {
+  const { host, guest, gameId } = round
+  host.send({ type: 'prompt', gameId, prompt: 'Host secret prompt' })
+  await host.next('ack')
+  guest.send({ type: 'prompt', gameId, prompt: 'Guest secret prompt' })
+  await guest.next('ack')
+  const hostView = await host.next('room', message => message.room.game?.phase === 'music')
+  const guestView = await guest.next('room', message => message.room.game?.phase === 'music')
+  return { hostView, guestView }
+}
+
+test('full round keeps assignments private, restores saved drafts, then reveals all submitted songs', async t => {
+  const connect = await setup(t, 1000)
+  const round = await startRound(connect)
+  const { host, guest, gameId, joined, created } = round
+  const { hostView, guestView } = await submitBothPrompts(round)
+  assert.equal(hostView.room.game.mine.prompt, 'Guest secret prompt')
+  assert.equal(guestView.room.game.mine.prompt, 'Host secret prompt')
+  assert.deepEqual(hostView.room.game.results, [])
+  assert.equal(hostView.room.game.deadline - hostView.room.game.serverNow <= 600000, true)
+  assert.ok(hostView.room.game.deadline - hostView.room.game.serverNow > 599000)
+  const late = await connect()
+  late.send({ type: 'join', roomId: created.room.id, name: 'Too late' })
+  assert.equal((await late.next('error')).code, 'in_progress')
+  const song = { pattern: emptyPattern(), bpm: 93 }
+  song.pattern.tom[17] = true
+  guest.send({ type: 'draft', gameId, song, revision: 1 })
+  assert.equal((await guest.next('draft_saved')).revision, 1)
+  guest.socket.close()
+  await host.next('room', message => message.room.players.some(player => !player.connected))
+  const restored = await connect()
+  restored.send({ type: 'resume', ...joined.session })
+  const resumed = await restored.next('joined')
+  assert.deepEqual(resumed.room.game.mine.song, song)
+  assert.equal(resumed.room.game.mine.prompt, 'Host secret prompt')
+  assert.equal(resumed.room.game.deadline, guestView.room.game.deadline)
+  host.send({ type: 'submit_song', gameId, song: { pattern: emptyPattern(), bpm: 120 } })
+  await host.next('ack')
+  const waiting = await host.next('room', message => message.room.game?.mine?.submitted)
+  assert.equal(waiting.room.game.phase, 'music')
+  assert.equal(waiting.room.game.completed, 1)
+  assert.deepEqual(waiting.room.game.results, [])
+  host.send({ type: 'draft', gameId, song, revision: 2 })
+  assert.equal((await host.next('error')).code, 'game')
+  restored.send({ type: 'submit_song', gameId, song })
+  await restored.next('ack')
+  const results = await host.next('room', message => message.room.game?.phase === 'results')
+  assert.equal(results.room.game.results.length, 2)
+  const guestResult = results.room.game.results.find(result => result.playerId === joined.session.playerId)
+  assert.deepEqual(guestResult.song, song)
+  assert.equal(guestResult.prompt, 'Host secret prompt')
+  assert.equal(guestResult.promptAuthor, 'Host')
+  assert.equal(guestResult.automatic, false)
+})
+
+test('server timer reveals saved drafts even when nobody submits a song', async t => {
+  const connect = await setup(t, 1000, 180)
+  const round = await startRound(connect)
+  await submitBothPrompts(round)
+  const song = { pattern: emptyPattern(), bpm: 80 }
+  song.pattern.kick[0] = true
+  round.host.send({ type: 'draft', gameId: round.gameId, song, revision: 1 })
+  await round.host.next('draft_saved')
+  const results = await round.guest.next('room', message => message.room.game?.phase === 'results')
+  assert.equal(results.room.game.results.length, 2)
+  assert.ok(results.room.game.results.every(result => result.automatic))
+  assert.deepEqual(results.room.game.results.find(result => result.name === 'Host').song, song)
+  round.host.send({ type: 'submit_song', gameId: round.gameId, song })
+  assert.equal((await round.host.next('error')).code, 'game')
+})
+
+test('a departed prompt writer gets a fallback and cannot block the remaining player', async t => {
+  const connect = await setup(t)
+  const round = await startRound(connect)
+  round.host.send({ type: 'prompt', gameId: round.gameId, prompt: 'A dancing cat' })
+  await round.host.next('ack')
+  round.guest.send({ type: 'leave' })
+  await round.guest.next('left')
+  const music = await round.host.next('room', message => message.room.game?.phase === 'music')
+  assert.ok(music.room.game.mine.prompt)
+  assert.equal(music.room.game.completed, 1)
+  round.host.send({ type: 'submit_song', gameId: round.gameId, song: { pattern: emptyPattern(), bpm: 120 } })
+  await round.host.next('ack')
+  await round.host.next('room', message => message.room.game?.phase === 'results')
 })

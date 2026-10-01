@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import Studio from './Studio'
+import GameScreen from './game/GameScreen'
 import { canStart, MAX_PLAYERS } from './lobby/lobby'
 import { useLobby } from './lobby/useLobby'
 
 export default function App() {
   const [sandbox, setSandbox] = useState(window.location.hash === '#sandbox')
   const [visitedStudio, setVisitedStudio] = useState(sandbox)
-  const { lobby, session, invite, connected, pending, notice, status, send, clearInvite, setNotice } = useLobby()
+  const { lobby, session, invite, connected, pending, notice, status, send, saveDraft, savedRevision, clearInvite, setNotice } = useLobby()
   const [guestName, setGuestName] = useState('')
   const heading = useRef<HTMLHeadingElement>(null)
 
@@ -34,7 +35,8 @@ export default function App() {
 
   return (
     <>
-      <main className="app home-app" hidden={sandbox}>
+      {lobby?.game && <GameScreen key={lobby.game.id} game={lobby.game} connected={connected} pending={pending} notice={notice} savedRevision={savedRevision} send={send} saveDraft={saveDraft} />}
+      <main className="app home-app" hidden={sandbox || !!lobby?.game}>
         <header className="brand-row">
           <a className="brand" href="#home" aria-label="Beat Telephone home">beat<span>telephone</span><span className="brand-dot">.</span></a>
           <span className="badge">Make a little noise</span>
@@ -59,7 +61,7 @@ export default function App() {
                 </li>)}
               </ul>
               {isHost && <button className="play-button home-primary" onClick={() => send('start')} disabled={!connected || pending || !canStart(lobby)} aria-describedby="start-help">Start game</button>}
-              <p id="start-help" className="card-note">{!isHost ? 'Waiting for the host to start.' : canStart(lobby) ? 'Ready to start. Game rounds are coming next.' : 'At least 2 connected players are needed to start.'}</p>
+              <p id="start-help" className="card-note">{!isHost ? 'Waiting for the host to start.' : canStart(lobby) ? 'Ready to start writing prompts.' : 'At least 2 connected players are needed to start.'}</p>
               <p className="local-note">Local server · Open the invite in another browser tab to join.</p>
               <button className="text-button" disabled={!connected || pending} onClick={() => send('leave')}>Leave lobby</button>
             </> : <>
@@ -87,7 +89,7 @@ export default function App() {
         </div>
         <footer className="page-footer"><p role="status">{notice}</p><p>Rooms last until the server restarts · Beats reset on refresh</p></footer>
       </main>
-      {visitedStudio && <div hidden={!sandbox}><Studio active={sandbox} hasLobby={lobby !== null} /></div>}
+      {visitedStudio && <div hidden={!sandbox || !!lobby?.game}><Studio active={sandbox && !lobby?.game} hasLobby={lobby !== null} /></div>}
     </>
   )
 }

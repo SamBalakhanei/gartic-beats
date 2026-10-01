@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
+import type { Song } from './game/types'
 import { DrumMachine } from './music/DrumMachine'
 import { DEFAULT_BPM, MIN_BPM, MAX_BPM, normalizeBpm, stepSeconds } from './music/tempo'
 import { BARS, TOTAL_STEPS, STEPS_PER_BAR, clearBar, createPreset, emptyPattern, instruments, toggleStep } from './music/pattern'
@@ -11,8 +12,14 @@ const presets: { id: Preset; label: string; description: string }[] = [
   { id: 'industrial', label: 'Industrial Stomp', description: 'Sparse kicks, metallic accents, and abrupt gaps.' },
 ]
 
-export default function Studio({ active, hasLobby }: { active: boolean; hasLobby: boolean }) {
-  const [pattern, setPattern] = useState(() => createPreset('soul'))
+type GameStudio = {
+  initialSong: Song; prompt: string; disabled: boolean; toolbar: ReactNode; saveStatus: string
+  onSongChange: (song: Song) => void; onSubmit: (song: Song) => void
+}
+export default function Studio({ active, hasLobby, game }: { active: boolean; hasLobby: boolean; game?: GameStudio }) {
+  const titleId = useId()
+  const tempoHelpId = useId()
+  const [pattern, setPattern] = useState(() => game?.initialSong.pattern ?? createPreset('soul'))
   const titleRef = useRef<HTMLHeadingElement>(null)
   const patternRef = useRef(pattern)
   const history = useRef<Pattern[]>([])
@@ -22,14 +29,15 @@ export default function Studio({ active, hasLobby }: { active: boolean; hasLobby
   const [starting, setStarting] = useState(false)
   const [step, setStep] = useState(-1)
   const [volume, setVolume] = useState(65)
-  const [bpm, setBpm] = useState(DEFAULT_BPM)
-  const [bpmInput, setBpmInput] = useState(String(DEFAULT_BPM))
+  const [bpm, setBpm] = useState(game?.initialSong.bpm ?? DEFAULT_BPM)
+  const [bpmInput, setBpmInput] = useState(String(game?.initialSong.bpm ?? DEFAULT_BPM))
   const [error, setError] = useState('')
   const [message, setMessage] = useState('Soul Chop loaded. Make it your own.')
 
   useEffect(() => {
     const engine = new DrumMachine(patternRef.current, setStep, setPlaying)
     machine.current = engine
+    engine.setBpm(bpm)
     const onHide = () => {
       if (document.hidden) {
         engine.stop()
@@ -45,9 +53,15 @@ export default function Studio({ active, hasLobby }: { active: boolean; hasLobby
   }, [])
 
   useEffect(() => {
-    if (!active) machine.current?.stop()
+    if (!active || game?.disabled) machine.current?.stop()
     else titleRef.current?.focus()
-  }, [active])
+  }, [active, game?.disabled])
+
+  const onSongChange = useRef(game?.onSongChange)
+  onSongChange.current = game?.onSongChange
+  useEffect(() => {
+    if (!game?.disabled) onSongChange.current?.({ pattern, bpm })
+  }, [pattern, bpm, game?.disabled])
 
   function changeTempo(value: number) {
     const next = normalizeBpm(value, bpm)
@@ -92,21 +106,23 @@ export default function Studio({ active, hasLobby }: { active: boolean; hasLobby
     <main className="app">
       <header className="brand-row">
         <a className="brand" href="#home" aria-label="Beat Telephone home">beat<span>telephone</span><span className="brand-dot">.</span></a>
-        <a className="secondary-button" href="#home">← Back to {hasLobby ? 'lobby' : 'home'}</a>
+        {game ? <span className="badge">Song round</span> : <a className="secondary-button" href="#home">← Back to {hasLobby ? 'lobby' : 'home'}</a>}
       </header>
 
-      <section className="brief" aria-labelledby="task-title">
+      {game?.toolbar}
+      <section className="brief" aria-labelledby={titleId}>
         <div>
           <p className="eyebrow">Your idea, in rhythm</p>
-          <h1 id="task-title" ref={titleRef} tabIndex={-1}>Give this raccoon a beat.</h1>
+          <h1 id={titleId} ref={titleRef} tabIndex={-1}>{game ? 'Make this idea a song.' : 'Give this raccoon a beat.'}</h1>
           <p className="instructions">Tap the squares to add sounds. No music experience needed.</p>
         </div>
         <aside className="prompt">
-          <span className="eyebrow">Practice prompt</span>
-          <p>“A raccoon breaking into a nightclub”</p>
+          <span className="eyebrow">{game ? 'Your assigned prompt' : 'Practice prompt'}</span>
+          <p>“{game?.prompt ?? 'A raccoon breaking into a nightclub'}”</p>
         </aside>
       </section>
 
+      <fieldset className="studio-controls" disabled={game?.disabled}>
       <section className="editor" aria-label="Drum editor">
         <div className="transport">
           <div className="playback-controls">
@@ -125,9 +141,9 @@ export default function Studio({ active, hasLobby }: { active: boolean; hasLobby
                 }}
                 onBlur={event => changeTempo(event.target.valueAsNumber)}
                 onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }}
-                aria-describedby="tempo-help" /></label>
+                aria-describedby={tempoHelpId} /></label>
               <span>4 bars · {Number((TOTAL_STEPS * stepSeconds(bpm)).toFixed(1))}-second loop</span>
-              <span id="tempo-help">{MIN_BPM}–{MAX_BPM} · Change while playing</span>
+              <span id={tempoHelpId}>{MIN_BPM}–{MAX_BPM} · Change while playing</span>
             </div>
           </div>
           <label className="volume">Volume <input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={event => {
@@ -197,8 +213,10 @@ export default function Studio({ active, hasLobby }: { active: boolean; hasLobby
           <button key={id} title={description} onClick={() => apply(createPreset(id), `${label} loaded across all four bars. Undo restores your beat.`)}>{label}<span aria-hidden="true"> ↗</span></button>
         ))}</div>
       </section>
+      </fieldset>
+      {game && <div className="song-submit"><p role="status">{game.saveStatus}</p><button className="play-button" disabled={game.disabled} onClick={() => game.onSubmit({ pattern, bpm })}>Submit song</button></div>}
       {error && <p className="error" role="alert">{error}</p>}
-      <footer className="page-footer"><p role="status">{message}</p><p>Practice only · Edits reset on refresh</p></footer>
+      <footer className="page-footer"><p role="status">{message}</p><p>{game ? 'Drafts saved to this room' : 'Practice only · Edits reset on refresh'}</p></footer>
     </main>
   )
 }

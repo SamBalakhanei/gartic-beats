@@ -32,6 +32,7 @@ export function useLobby() {
   const [connected, setConnected] = useState(false)
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState('')
+  const [savedRevision, setSavedRevision] = useState(0)
   const [invite, setInvite] = useState(new URLSearchParams(location.search).get('room') ?? '')
 
   useEffect(() => {
@@ -55,7 +56,7 @@ export function useLobby() {
       ws.onmessage = event => {
         if (disposed) return
         const message = JSON.parse(event.data) as ServerMessage
-        if (message.type !== 'room') { setPending(false); clearTimeout(timeout.current) }
+        if (message.type !== 'room' && message.type !== 'draft_saved') { setPending(false); clearTimeout(timeout.current) }
         if (message.type === 'joined') {
           sessionRef.current = message.session
           saveSession(message.session)
@@ -63,8 +64,9 @@ export function useLobby() {
           setLobby(message.room)
           setInvite(message.room.id)
           updateInvite(message.room.id)
-          setNotice('You’re in. Share the invite link to bring friends in.')
+          setNotice(message.room.game ? 'Reconnected to your game.' : 'You’re in. Share the invite link to bring friends in.')
         } else if (message.type === 'room') setLobby(message.room)
+        else if (message.type === 'draft_saved') setSavedRevision(message.revision)
         else if (message.type === 'notice') setNotice(message.message)
         else if (message.type === 'left' || message.type === 'error' && ['session_expired', 'session_in_use'].includes(message.code)) {
           sessionRef.current = null
@@ -94,7 +96,7 @@ export function useLobby() {
     }
   }, [])
 
-  function send(type: string, extra: Record<string, string> = {}) {
+  function send(type: string, extra: Record<string, unknown> = {}) {
     if (socket.current?.readyState !== WebSocket.OPEN || pending) return
     setNotice('')
     setPending(true)
@@ -104,6 +106,11 @@ export function useLobby() {
       socket.current?.close()
     }, 8000)
   }
+  function saveDraft(extra: Record<string, unknown>) {
+    if (socket.current?.readyState !== WebSocket.OPEN) return false
+    socket.current.send(JSON.stringify({ type: 'draft', ...extra }))
+    return true
+  }
   function clearInvite() { setInvite(''); updateInvite(); setNotice('') }
-  return { lobby, session, invite, connected, pending, notice, status, send, clearInvite, setNotice }
+  return { lobby, session, invite, connected, pending, notice, status, send, saveDraft, savedRevision, clearInvite, setNotice }
 }

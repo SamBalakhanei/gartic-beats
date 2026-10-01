@@ -1,3 +1,6 @@
+import { createGame, departGame, finishIfReady, gameView, saveSong, submitPrompt } from './game.ts'
+import type { Game } from './game.ts'
+import { MUSIC_DURATION_MS } from '../src/game/types.ts'
 import { randomBytes, randomUUID } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import type { EventEmitter } from 'node:events'
@@ -7,28 +10,45 @@ import { canStart, MAX_PLAYERS } from '../src/lobby/lobby.ts'
 import type { Lobby, ServerMessage } from '../src/lobby/lobby.ts'
 
 type Member = { id: string; name: string; token: string; socket: WebSocket | null; expiry?: ReturnType<typeof setTimeout> }
-type Room = { id: string; hostId: string; players: Member[] }
+type Room = { id: string; hostId: string; players: Member[]; game?: Game; gameTimer?: ReturnType<typeof setTimeout> }
 
-export function attachLobbyServer(server: EventEmitter, graceMs = 30_000) {
+export function attachLobbyServer(server: EventEmitter, graceMs = 30_000, musicDuration = MUSIC_DURATION_MS) {
   const rooms = new Map<string, Room>()
   const membership = new Map<WebSocket, { room: Room; player: Member }>()
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16384 })
   let closed = false
   const send = (socket: WebSocket, message: ServerMessage) => {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))
   }
-  const snapshot = (room: Room): Lobby => ({
+  const snapshot = (room: Room, playerId = ''): Lobby => ({
     id: room.id, hostId: room.hostId,
+    game: room.game ? gameView(room.game, playerId, Date.now()) : undefined,
     players: room.players.map(player => ({ id: player.id, name: player.name, connected: player.socket?.readyState === WebSocket.OPEN })),
   })
-  const broadcast = (room: Room, message: ServerMessage = { type: 'room', room: snapshot(room) }) => {
-    for (const player of room.players) if (player.socket) send(player.socket, message)
+  const broadcast = (room: Room) => {
+    for (const player of room.players) if (player.socket) send(player.socket, { type: 'room', room: snapshot(room, player.id) })
+  }
+  const syncGame = (room: Room) => {
+    if (!room.game) return
+    const previousPhase = room.game.phase
+    finishIfReady(room.game, Date.now())
+    if (room.game.phase !== previousPhase) broadcast(room)
+    if (room.game.phase === 'music' && !room.gameTimer) {
+      room.gameTimer = setTimeout(() => {
+        finishIfReady(room.game!, Date.now())
+        room.gameTimer = undefined
+        syncGame(room)
+        broadcast(room)
+      }, Math.max(1, room.game.deadline! - Date.now()))
+      room.gameTimer.unref()
+    } else if (room.game.phase === 'results') { clearTimeout(room.gameTimer); room.gameTimer = undefined }
   }
   const remove = (room: Room, player: Member) => {
     clearTimeout(player.expiry)
+    if (room.game) { departGame(room.game, player.id, Date.now(), musicDuration); syncGame(room) }
     if (player.socket) membership.delete(player.socket)
     room.players = room.players.filter(item => item !== player)
-    if (!room.players.length) { rooms.delete(room.id); return }
+    if (!room.players.length) { clearTimeout(room.gameTimer); rooms.delete(room.id); return }
     if (room.hostId === player.id) room.hostId = (room.players.find(item => item.socket?.readyState === WebSocket.OPEN) ?? room.players[0]).id
     broadcast(room)
   }
@@ -37,7 +57,8 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000) {
     if (player.socket) membership.delete(player.socket)
     player.socket = socket
     membership.set(socket, { room, player })
-    send(socket, { type: 'joined', room: snapshot(room), session: { roomId: room.id, playerId: player.id, token: player.token } })
+    syncGame(room)
+    send(socket, { type: 'joined', room: snapshot(room, player.id), session: { roomId: room.id, playerId: player.id, token: player.token } })
     broadcast(room)
   }
   const upgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => {
@@ -90,6 +111,7 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000) {
           enter(socket, created, player)
         } else {
           if (!room) { fail('not_found', 'This room no longer exists. Ask the host for a new invite.'); return }
+          if (room.game) { fail('in_progress', 'This game has already started. Wait for a new lobby.'); return }
           if (room.players.length >= MAX_PLAYERS) { fail('full', 'This room is full (8 players).'); return }
           room.players.push(player)
           enter(socket, room, player)
@@ -97,13 +119,36 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000) {
         return
       }
       if (!current) { fail('not_joined', 'Join a room first.'); return }
+      syncGame(current.room)
       if (message.type === 'leave') {
         remove(current.room, current.player)
         send(socket, { type: 'left' })
       } else if (message.type === 'start') {
         if (current.room.hostId !== current.player.id) { fail('host_only', 'Only the host can start the game.'); return }
         if (!canStart(snapshot(current.room))) { fail('too_few', 'At least two connected players are needed.'); return }
-        broadcast(current.room, { type: 'notice', message: 'The host is ready to start! Game rounds are coming next.' })
+        if (current.room.game) { fail('in_progress', 'This game has already started.'); return }
+        current.room.game = createGame(current.room.players.filter(player => player.socket?.readyState === WebSocket.OPEN))
+        send(socket, { type: 'ack' })
+        broadcast(current.room)
+      } else if (['prompt', 'draft', 'submit_song'].includes(String(message.type))) {
+        const game = current.room.game
+        if (!game) { fail('no_game', 'Start a game first.'); return }
+        try {
+          if (message.gameId !== game.id) throw new Error('This request belongs to a different game.')
+          if (message.type === 'prompt') submitPrompt(game, current.player.id, message.prompt, Date.now(), musicDuration)
+          else saveSong(game, current.player.id, message.song, message.type === 'submit_song', Date.now())
+          syncGame(current.room)
+          if (message.type === 'draft') {
+            send(socket, { type: 'draft_saved', revision: typeof message.revision === 'number' ? message.revision : 0 })
+          } else {
+            broadcast(current.room)
+            send(socket, { type: 'ack' })
+          }
+        } catch (error) {
+          fail('game', error instanceof Error ? error.message : 'Unable to save this turn.')
+          syncGame(current.room)
+          broadcast(current.room)
+        }
       } else fail('invalid', 'Unknown lobby request.')
     })
     socket.on('close', () => {
@@ -121,7 +166,7 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000) {
     if (closed) return
     closed = true
     server.off('upgrade', upgrade)
-    for (const room of rooms.values()) for (const player of room.players) clearTimeout(player.expiry)
+    for (const room of rooms.values()) { clearTimeout(room.gameTimer); for (const player of room.players) clearTimeout(player.expiry) }
     for (const socket of wss.clients) socket.terminate()
     wss.close()
     rooms.clear()

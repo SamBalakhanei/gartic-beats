@@ -12,11 +12,11 @@ A home screen, live local lobbies, and drum sandbox built with React, TypeScript
 - Three starter patterns with deliberately sparse percussion, clear bar/all, and undo for the last 20 edits.
 - Keyboard-accessible buttons and a stacked beat layout on small screens.
 
-The home screen offers Create game and Go to Sandbox. Enter a guest name to create a server-owned room, then share the invite link with another browser on the same computer. The roster updates live. Only the host can request Start, and the server requires two connected players. Start broadcasts a readiness message; game rounds are not implemented yet.
+The home screen offers Create game and Go to Sandbox. Enter a guest name to create a server-owned room, then share the invite link with another browser on the same computer. The roster updates live. Only the host can request Start, and the server requires two connected players. Start opens a prompt-writing round for every connected player. After everyone submits, the server randomly assigns each prompt to someone else and starts a shared 10-minute song round. Each person makes one song. Results open when everyone submits or time expires, with playback, prompts, and credits for every song.
 
 Lobby membership survives refresh through a private reconnect token in per-tab session storage. Disconnects reserve a player slot for 30 seconds. Leaving immediately releases the slot; an absent host transfers ownership when their grace period expires. Rooms are stored in memory and disappear on server restart (including Vite config/server code changes). Empty rooms are deleted.
 
-Sandbox navigation preserves the lobby connection and beat and stops audio when leaving the studio. Beat edits still reset on refresh. Timers, submissions, chain rotation, reveal, and public hosting are future steps.
+Sandbox navigation preserves the lobby connection and beat and stops audio when leaving the studio. Beat edits still reset on refresh. The current game is a single prompt-to-song round. Longer telephone chains and public hosting are future steps.
 
 ## Run locally
 
@@ -40,7 +40,9 @@ Open http://localhost:5173 in your browser. Keep the terminal running; press Ctr
 ## Files
 
 - `src/App.tsx`: home, local lobby, and sandbox navigation.
-- `src/Studio.tsx`: editor controls and pattern history.
+- `src/Studio.tsx`: shared sandbox/game editor controls and pattern history.
+- `src/game/GameScreen.tsx`: prompt form, round timer, submission, and results playback.
+- `server/game.ts`: game state, assignment, validation, and per-player views.
 - `src/lobby/lobby.ts`: shared room/message types and the connected-player start rule.
 - `src/lobby/useLobby.ts`: browser connection, per-tab session restoration, and reconnect handling.
 - `server/lobby-server.ts`: authoritative in-memory room service, attached to Vite at `/lobby`.
@@ -53,7 +55,7 @@ Open http://localhost:5173 in your browser. Keep the terminal running; press Ctr
 
 ## Next milestone
 
-Add the first synchronized prompt round after testing local joining.
+Playtest the single-song round before expanding the game.
 
 ## Try local joining
 
@@ -66,6 +68,19 @@ Add the first synchronized prompt round after testing local joining.
 7. Open Sandbox and return: membership remains connected and your beat is preserved.
 
 A localhost invite works on this computer only. Do not send it to friends on other computers yet. No accounts or public deployment are included. If clipboard access fails, select and copy the visible invite field.
+
+## Play a round
+
+1. Join from two or more tabs and have the host select **Start game**.
+2. Every player writes and submits a prompt (1–240 characters). There is no prompt timer yet.
+3. When all prompts are ready, each player receives someone else's prompt and a blank studio. The shared song deadline is fixed at 10 minutes. Each prompt is used once.
+4. Edit the rhythm and BPM. Each edit is sent to the server; **All changes saved** means the server acknowledged it. Refreshing restores the latest saved draft and the same assignment/deadline. Editing pauses while disconnected.
+5. **Submit song** locks the song and waits for the remaining players. When everyone submits, or the deadline passes, all players see the results.
+6. Play a song beside its creator's name. The prompt and prompt author are shown; switching tracks stops the previous one. Empty songs are identified explicitly.
+
+The server owns phase transitions, deadlines, assignments, and validation. Other prompts and songs are not sent to players before results. Deadline submissions use the last server-saved draft; no browser tab needs to stay active for the deadline to fire. Unsent edits during a connection failure cannot be recovered by the server.
+
+Players who leave or exceed the 30-second reconnect grace period do not block the game. Missing prompts receive a fallback; departed players' saved songs are finalized automatically. The original participant list and contributions remain in results. New players cannot join an active or completed game; create a new lobby for another round. Rooms and game data still disappear on a server restart.
 
 ## Try the editor
 

@@ -4,7 +4,7 @@ A browser party game where friends turn silly prompts into music, then reinterpr
 
 ## Current scope
 
-A local drum-editor prototype built with React, TypeScript, Vite, and the browser Web Audio API.
+A home screen, local lobby preview, and drum sandbox built with React, TypeScript, Vite, and the browser Web Audio API.
 
 - Eight synthesized sounds: kick, snare, closed hi-hat, clap, open hi-hat, low tom, rimshot, and cowbell. No audio downloads.
 - Four bars of 16 steps at 120 BPM: an eight-second loop.
@@ -12,7 +12,9 @@ A local drum-editor prototype built with React, TypeScript, Vite, and the browse
 - Three starter patterns with deliberately sparse percussion, clear bar/all, and undo for the last 20 edits.
 - Keyboard-accessible buttons and a stacked beat layout on small screens.
 
-This is a practice screen with a fixed example prompt. Edits are held in memory and reset on refresh. Rooms, saved drafts, timers, submission, and reveal are not implemented yet.
+The home screen offers Create game and Go to Sandbox. Create game creates a local lobby with you as host; add local guest names to preview the roster. Start game appears only with a lobby and is disabled below two players. At two or more players it shows a readiness message; it does not start rounds yet. Guests are local entries, not connected users.
+
+Sandbox is the practice studio with a fixed example prompt. Navigation preserves the lobby and beat, stops audio when leaving the studio, and supports browser back/forward through hash links. Edits are held in memory and reset on refresh. Online rooms and joining, saved drafts, timers, submission, and reveal are not implemented yet.
 
 ## Run locally
 
@@ -35,7 +37,9 @@ Open http://localhost:5173 in your browser. Keep the terminal running; press Ctr
 
 ## Files
 
-- `src/App.tsx`: editor controls and pattern history.
+- `src/App.tsx`: home, local lobby, and sandbox navigation.
+- `src/Studio.tsx`: editor controls and pattern history.
+- `src/lobby/lobby.ts`: local roster operations and the two-player start rule.
 - `src/music/pattern.ts`: serializable pattern data and editing operations.
 - `src/music/DrumMachine.ts`: audio-clock scheduling and output compression for overlapping voices.
 - `src/music/sounds.ts`: eight synthesized percussion voices.
@@ -49,7 +53,7 @@ Playtest this editor before adding game rounds and multiplayer.
 
 ## Try the editor
 
-1. Press **Play beat** to hear the initial Soul Chop pattern. Audio starts only after an interaction.
+1. From home, choose **Go to Sandbox**, then press **Play beat** to hear the initial Soul Chop pattern. Audio starts only after an interaction.
 2. Tap squares to change the rhythm while it plays. The white outline shows the current step; the bar indicator shows the current playback bar.
 3. Select another bar to edit it. Bar selection does not jump playback.
 4. Tap an instrument name to preview its sound. Adjust Volume as needed.

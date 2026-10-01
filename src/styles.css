@@ -111,3 +111,44 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
   .beats { gap: 12px; }
   .beat-steps { gap: 4px; }
 }
+
+/* Home and local lobby */
+[hidden] { display: none !important; }
+.home-app { max-width: 1080px; }
+.home-intro { margin: 64px 0 36px; max-width: 660px; }
+.home-intro h1 { font-size: clamp(2.6rem, 6vw, 4.6rem); line-height: 1.08; }
+.home-intro h1 span { color: #c2ff8a; }
+.home-intro h1:focus { outline: none; }
+.home-intro > p:last-child { max-width: 480px; color: #b9b8cb; line-height: 1.7; font-size: 1.1rem; }
+.home-panels { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; align-items: start; }
+.home-card { padding: 28px; background: #1e1f2a; border: 1px solid #3b3c4b; border-radius: 18px; }
+.home-card h2 { font-size: 1.4rem; letter-spacing: -0.03em; margin: 0; }
+.home-card > p:not(.eyebrow) { color: #b9b8cb; line-height: 1.65; }
+.card-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.home-primary { width: 100%; margin-top: 20px; }
+.card-note { font-size: 0.875rem; margin: 12px 0 0; }
+.secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 44px; border: 1px solid #555665; border-radius: 9px; background: #292a37; color: #f3f2f8; text-decoration: none; padding: 12px 18px; font-size: 0.9rem; }
+.secondary-button:hover:not(:disabled) { background: #3b3c4b; }
+.sandbox-link { width: 100%; margin-top: 16px; justify-content: space-between; }
+.mini-sequencer { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-bottom: 30px; }
+.mini-sequencer span { height: 18px; border-radius: 3px; background: #343542; }
+.mini-sequencer .lit { background: #bba4ff; }
+.mini-sequencer .lit:nth-child(3n) { background: #c2ff8a; }
+.player-list { list-style: none; padding: 0; margin: 20px 0; }
+.player-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #343542; }
+.player-avatar { display: grid; place-items: center; flex: 0 0 36px; height: 36px; border-radius: 8px; background: #bba4ff; color: #231a38; font-size: 0.8rem; font-weight: 700; }
+.player-name { flex: 1; overflow-wrap: anywhere; min-width: 0; }
+.host-label { font-size: 0.875rem; color: #c2ff8a; }
+.remove-player, .text-button { background: none; border: none; color: #c6c4d6; min-height: 44px; padding: 8px; font-size: 0.875rem; text-decoration: underline; text-underline-offset: 4px; }
+.guest-form label { display: block; font-size: 0.875rem; margin-bottom: 10px; }
+.guest-input-row { display: flex; gap: 8px; }
+.guest-input-row input { min-width: 0; width: 100%; border: 1px solid #555665; border-radius: 8px; background: #14151d; color: #f3f2f8; padding: 12px; }
+.guest-input-row button { flex-shrink: 0; }
+.local-note { font-size: 0.8rem; border-top: 1px solid #343542; padding-top: 16px; }
+.text-button { margin-top: 8px; padding-left: 0; }
+@media (max-width: 760px) {
+  .home-intro { margin-top: 40px; }
+  .home-panels { grid-template-columns: 1fr; gap: 18px; }
+  .home-card { padding: 22px; }
+}
+@media (max-width: 400px) { .guest-input-row { flex-direction: column; } }

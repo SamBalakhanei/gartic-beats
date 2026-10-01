@@ -1,173 +1,101 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
-import { DrumMachine } from './music/DrumMachine'
-import { BARS, BPM, STEPS_PER_BAR, clearBar, createPreset, emptyPattern, instruments, toggleStep } from './music/pattern'
-import type { Instrument, Pattern, Preset } from './music/pattern'
-
-const presets: { id: Preset; label: string; description: string }[] = [
-  { id: 'soul', label: 'Soul Chop', description: 'A laid-back pocket with syncopated kicks and skipping hats.' },
-  { id: 'stadium', label: 'Stadium Glow', description: 'Big backbeats, layered claps, and a closing tom fill.' },
-  { id: 'industrial', label: 'Industrial Stomp', description: 'Sparse kicks, metallic accents, and abrupt gaps.' },
-]
+import Studio from './Studio'
+import { addPlayer, canStart, createLobby, MAX_PLAYERS, removePlayer } from './lobby/lobby'
+import type { Lobby } from './lobby/lobby'
 
 export default function App() {
-  const [pattern, setPattern] = useState(() => createPreset('soul'))
-  const patternRef = useRef(pattern)
-  const history = useRef<Pattern[]>([])
-  const machine = useRef<DrumMachine | null>(null)
-  const [bar, setBar] = useState(0)
-  const [playing, setPlaying] = useState(false)
-  const [starting, setStarting] = useState(false)
-  const [step, setStep] = useState(-1)
-  const [volume, setVolume] = useState(65)
-  const [error, setError] = useState('')
-  const [message, setMessage] = useState('Soul Chop loaded. Make it your own.')
+  const [sandbox, setSandbox] = useState(window.location.hash === '#sandbox')
+  const [visitedStudio, setVisitedStudio] = useState(sandbox)
+  const [lobby, setLobby] = useState<Lobby | null>(null)
+  const [guestName, setGuestName] = useState('')
+  const [notice, setNotice] = useState('')
+  const heading = useRef<HTMLHeadingElement>(null)
+  const nameInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    const engine = new DrumMachine(patternRef.current, setStep, setPlaying)
-    machine.current = engine
-    const onHide = () => {
-      if (document.hidden) {
-        engine.stop()
-        setMessage('Playback paused while this tab is hidden.')
-      }
+    const navigate = () => {
+      const next = window.location.hash === '#sandbox'
+      setSandbox(next)
+      if (next) setVisitedStudio(true)
     }
-    document.addEventListener('visibilitychange', onHide)
-    return () => {
-      document.removeEventListener('visibilitychange', onHide)
-      engine.dispose()
-      machine.current = null
-    }
+    window.addEventListener('hashchange', navigate)
+    return () => window.removeEventListener('hashchange', navigate)
   }, [])
 
-  function apply(next: Pattern, description: string, remember = true) {
-    if (remember) history.current = [...history.current.slice(-19), patternRef.current]
-    patternRef.current = next
-    machine.current?.setPattern(next)
-    setPattern(next)
-    setMessage(description)
+  useEffect(() => {
+    if (!sandbox) heading.current?.focus()
+  }, [sandbox, lobby !== null])
+
+  function create() {
+    setLobby(createLobby())
+    setNotice('Lobby created. Add another player to get ready.')
   }
 
-  function undo() {
-    const previous = history.current.pop()
-    if (previous) apply(previous, 'Last edit undone.', false)
+  function start() {
+    if (!lobby || !canStart(lobby)) return
+    setNotice('Your group is ready! Game rounds are coming in the next step.')
   }
-
-  async function togglePlayback() {
-    if (playing) { machine.current?.stop(); return }
-    setError('')
-    setStarting(true)
-    try { await machine.current?.start() }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Sound could not start. Please try again.') }
-    finally { setStarting(false) }
-  }
-
-  async function preview(id: Instrument) {
-    setError('')
-    try { await machine.current?.preview(id) }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Sound could not start. Please try again.') }
-  }
-
-  const playingBar = step < 0 ? -1 : Math.floor(step / STEPS_PER_BAR)
-  const notes = instruments.reduce((count, { id }) => count + pattern[id].filter(Boolean).length, 0)
-  const barIsEmpty = instruments.every(({ id }) => !pattern[id].slice(bar * STEPS_PER_BAR, (bar + 1) * STEPS_PER_BAR).some(Boolean))
 
   return (
-    <main className="app">
-      <header className="brand-row">
-        <a className="brand" href="/" aria-label="Beat Telephone home">beat<span>telephone</span><span className="brand-dot">.</span></a>
-        <span className="badge">Drum playground</span>
-      </header>
-
-      <section className="brief" aria-labelledby="task-title">
-        <div>
-          <p className="eyebrow">Your idea, in rhythm</p>
-          <h1 id="task-title">Give this raccoon a beat.</h1>
-          <p className="instructions">Tap the squares to add sounds. No music experience needed.</p>
+    <>
+      <main className="app home-app" hidden={sandbox}>
+        <header className="brand-row">
+          <a className="brand" href="#home" aria-label="Beat Telephone home">beat<span>telephone</span><span className="brand-dot">.</span></a>
+          <span className="badge">Make a little noise</span>
+        </header>
+        <section className="home-intro">
+          <p className="eyebrow">Good friends. Questionable beats.</p>
+          <h1 ref={heading} tabIndex={-1}>{lobby ? 'Get the band together.' : <>Pass the beat.<br /><span>Lose the plot.</span></>}</h1>
+          <p>{lobby ? 'Your lobby is ready. Gather your players before the first round.' : 'Turn silly ideas into music, pass them around, and hear where they end up.'}</p>
+        </section>
+        <div className="home-panels">
+          <section className="home-card lobby-card" aria-labelledby="lobby-title">
+            <div className="card-heading"><h2 id="lobby-title">{lobby ? 'Your lobby' : 'Bring your friends'}</h2>{lobby && <span className="badge">{lobby.players.length} / {MAX_PLAYERS} players</span>}</div>
+            {lobby ? <>
+              <ul className="player-list" aria-label="Lobby players">
+                {lobby.players.map((player, index) => <li key={player.id}>
+                  <span className="player-avatar" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="player-name">{player.name}</span>
+                  {player.id === lobby.hostId ? <span className="host-label">Host</span> : <button className="remove-player" onClick={() => {
+                    setLobby(removePlayer(lobby, player.id))
+                    setNotice(`${player.name} removed from the lobby.`)
+                  }} aria-label={`Remove ${player.name}`}>Remove</button>}
+                </li>)}
+              </ul>
+              <form className="guest-form" onSubmit={event => {
+                event.preventDefault()
+                if (!guestName.trim() || lobby.players.length >= MAX_PLAYERS) return
+                setLobby(addPlayer(lobby, guestName, crypto.randomUUID()))
+                setNotice(`${guestName.trim()} added to the lobby.`)
+                setGuestName('')
+                nameInput.current?.focus()
+              }}>
+                <label htmlFor="guest-name">Add a local player</label>
+                <div className="guest-input-row"><input ref={nameInput} id="guest-name" value={guestName} onChange={event => setGuestName(event.target.value)} maxLength={24} placeholder="Guest name" autoComplete="off" disabled={lobby.players.length >= MAX_PLAYERS} />
+                  <button className="secondary-button" type="submit" disabled={!guestName.trim() || lobby.players.length >= MAX_PLAYERS}>Add player</button></div>
+              </form>
+              <button className="play-button home-primary" onClick={start} disabled={!canStart(lobby)} aria-describedby="start-help">Start game</button>
+              <p id="start-help" className="card-note">{canStart(lobby) ? 'Ready to start. Game rounds are coming next.' : 'At least 2 players are needed to start.'}</p>
+              <p className="local-note">Local lobby preview · Online invites and joining come next.</p>
+              <button className="text-button" onClick={() => { setLobby(null); setGuestName(''); setNotice('Lobby closed.') }}>Close lobby</button>
+            </> : <>
+              <p>A new lobby starts with you. Get your group ready for musical telephone.</p>
+              <button className="play-button home-primary" onClick={create}>Create game</button>
+              <p className="card-note">2–8 players · No musical experience needed</p>
+            </>}
+          </section>
+          <section className="home-card sandbox-card" aria-labelledby="sandbox-title">
+            <div className="mini-sequencer" aria-hidden="true">{Array.from({ length: 24 }, (_, index) => <span key={index} className={[0, 3, 6, 10, 14, 17, 21, 23].includes(index) ? 'lit' : ''} />)}</div>
+            <p className="eyebrow">Just you and the groove</p>
+            <h2 id="sandbox-title">Find your sound.</h2>
+            <p>Eight instruments and a few starting grooves to make your own. Play as long as you like.</p>
+            <a className="secondary-button sandbox-link" href="#sandbox">Go to Sandbox <span aria-hidden="true">↗</span></a>
+            <p className="card-note">No lobby needed. Your beat stays when you come back.</p>
+          </section>
         </div>
-        <aside className="prompt">
-          <span className="eyebrow">Practice prompt</span>
-          <p>“A raccoon breaking into a nightclub”</p>
-        </aside>
-      </section>
-
-      <section className="editor" aria-label="Drum editor">
-        <div className="transport">
-          <div className="playback-controls">
-            <button className={`play-button ${playing ? 'is-playing' : ''}`} disabled={starting} onClick={() => void togglePlayback()}>
-              <span aria-hidden="true">{playing ? '■' : '▶'}</span> {starting ? 'Starting…' : playing ? 'Stop' : 'Play beat'}
-            </button>
-            <div className="timing"><strong>{BPM} BPM</strong><span>4 bars · 8-second loop</span></div>
-          </div>
-          <label className="volume">Volume <input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={event => {
-            const value = Number(event.target.value)
-            setVolume(value)
-            machine.current?.setVolume(value / 100)
-          }} /><span>{volume}%</span></label>
-        </div>
-
-        <div className="bar-toolbar">
-          <div className="bar-buttons" role="group" aria-label="Choose a bar to edit">
-            {Array.from({ length: BARS }, (_, index) => (
-              <button key={index} aria-pressed={bar === index} onClick={() => setBar(index)} className={`bar-button ${playingBar === index ? 'sounding' : ''}`}>
-                Bar {index + 1}<span className="bar-light" aria-hidden="true" />
-                {playingBar === index && <span className="sr-only">, playing</span>}
-              </button>
-            ))}
-          </div>
-          <span className="play-position">{playingBar < 0 ? 'Ready when you are' : `Playing bar ${playingBar + 1} of 4`}</span>
-        </div>
-
-        <div className="tracks">
-          {instruments.map(({ id, name, hint, color }) => (
-            <div className="track" key={id} style={{ '--track-color': color } as CSSProperties}>
-              <button className="instrument" onClick={() => void preview(id)} aria-label={`Preview ${name}`}>
-                <span className="instrument-icon" aria-hidden="true">♪</span>
-                <span><strong>{name}</strong><small>{hint}</small></span>
-                <span className="preview-icon" aria-hidden="true">▶</span>
-              </button>
-              <div className="beats">
-                {Array.from({ length: 4 }, (_, beat) => (
-                  <div className="beat" key={beat}>
-                    <span className="beat-label" aria-hidden="true">{beat + 1}</span>
-                    <div className="beat-steps">
-                      {Array.from({ length: 4 }, (_, subdivision) => {
-                        const localStep = beat * 4 + subdivision
-                        const absoluteStep = bar * STEPS_PER_BAR + localStep
-                        const on = pattern[id][absoluteStep]
-                        return <button key={localStep}
-                          className={`step ${on ? 'active' : ''} ${step === absoluteStep ? 'current' : ''}`}
-                          aria-label={`${name}, bar ${bar + 1}, beat ${beat + 1}, step ${subdivision + 1}`}
-                          aria-pressed={on}
-                          onClick={() => apply(toggleStep(patternRef.current, id, absoluteStep), `${name}: bar ${bar + 1}, step ${localStep + 1} ${on ? 'removed' : 'added'}.`)}
-                        ><span aria-hidden="true">{on ? '●' : ''}</span></button>
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="editor-footer">
-          <p><span className="legend-square" aria-hidden="true" /> Lit squares make a sound. Tap an instrument to hear it.</p>
-          <div className="edit-actions">
-            <button onClick={undo} disabled={history.current.length === 0}>Undo</button>
-            <button onClick={() => apply(clearBar(patternRef.current, bar), `Bar ${bar + 1} cleared. Undo brings it back.`)} disabled={barIsEmpty}>Clear bar</button>
-            <button onClick={() => apply(emptyPattern(), 'Beat cleared. Start fresh, or undo to bring it back.')} disabled={notes === 0}>Clear all</button>
-          </div>
-        </div>
-      </section>
-
-      <section className="starters" aria-labelledby="starters-title">
-        <div><h2 id="starters-title">Need a starting point?</h2><p>Replace all four bars with a pattern, then change anything.</p></div>
-        <div className="preset-buttons">{presets.map(({ id, label, description }) => (
-          <button key={id} title={description} onClick={() => apply(createPreset(id), `${label} loaded across all four bars. Undo restores your beat.`)}>{label}<span aria-hidden="true"> ↗</span></button>
-        ))}</div>
-      </section>
-      {error && <p className="error" role="alert">{error}</p>}
-      <footer className="page-footer"><p role="status">{message}</p><p>Practice only · Edits reset on refresh</p></footer>
-    </main>
+        <footer className="page-footer"><p role="status">{notice}</p><p>Lobby and beat reset on refresh</p></footer>
+      </main>
+      {visitedStudio && <div hidden={!sandbox}><Studio active={sandbox} hasLobby={lobby !== null} /></div>}
+    </>
   )
 }

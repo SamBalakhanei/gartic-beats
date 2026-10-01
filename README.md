@@ -6,10 +6,10 @@ A browser party game where friends turn silly prompts into music, then reinterpr
 
 A local drum-editor prototype built with React, TypeScript, Vite, and the browser Web Audio API.
 
-- Four synthesized sounds: kick, snare, hi-hat, and cowbell. No audio downloads.
+- Eight synthesized sounds: kick, snare, closed hi-hat, clap, open hi-hat, low tom, rimshot, and cowbell. No audio downloads.
 - Four bars of 16 steps at 120 BPM: an eight-second loop.
 - Play/stop, volume, sound previews, a playhead, and independent bar selection.
-- Three starter patterns, clear bar/all, and undo for the last 20 edits.
+- Three starter patterns with deliberately sparse percussion, clear bar/all, and undo for the last 20 edits.
 - Keyboard-accessible buttons and a stacked beat layout on small screens.
 
 This is a practice screen with a fixed example prompt. Edits are held in memory and reset on refresh. Rooms, saved drafts, timers, submission, and reveal are not implemented yet.
@@ -28,7 +28,7 @@ Open http://localhost:5173 in your browser. Keep the terminal running; press Ctr
 ## Commands
 
 - `npm run dev`: start the local development server.
-- `npm test`: run pattern integrity and non-destructive editing checks.
+- `npm test`: run pattern integrity, non-destructive editing, and sound-generation checks.
 - `npm run typecheck`: check TypeScript without building.
 - `npm run build`: check TypeScript and build the site into `dist/`.
 - `npm run preview`: preview the production build locally after building.
@@ -37,7 +37,8 @@ Open http://localhost:5173 in your browser. Keep the terminal running; press Ctr
 
 - `src/App.tsx`: editor controls and pattern history.
 - `src/music/pattern.ts`: serializable pattern data and editing operations.
-- `src/music/DrumMachine.ts`: sound synthesis and audio-clock scheduling.
+- `src/music/DrumMachine.ts`: audio-clock scheduling and output compression for overlapping voices.
+- `src/music/sounds.ts`: eight synthesized percussion voices.
 - `src/styles.css`: shared styles and responsive layout.
 - `src/main.tsx`: React entry point.
 - `vite.config.ts`: development and build configuration.
@@ -48,12 +49,22 @@ Playtest this editor before adding game rounds and multiplayer.
 
 ## Try the editor
 
-1. Press **Play beat** to hear the initial Sneaky steps pattern. Audio starts only after an interaction.
+1. Press **Play beat** to hear the initial Soul Chop pattern. Audio starts only after an interaction.
 2. Tap squares to change the rhythm while it plays. The white outline shows the current step; the bar indicator shows the current playback bar.
 3. Select another bar to edit it. Bar selection does not jump playback.
 4. Tap an instrument name to preview its sound. Adjust Volume as needed.
 5. Try a starter, Clear bar, or Clear all, then Undo to recover the previous pattern.
 6. Switching away from the tab stops playback; press Play again when you return.
+
+## Starter directions
+
+These original drum sketches explore the soulful-to-industrial range of the project's early-2000s-to-2010s hip-hop reference:
+
+- **Soul Chop:** a half-time backbeat, syncopated kicks, and skipping hats.
+- **Stadium Glow:** full backbeats, layered claps, open hats, and a closing tom fill.
+- **Industrial Stomp:** clustered kicks, metallic accents, and deliberate empty space.
+
+Each has four distinct bars. They use the existing fixed 120 BPM grid and synthesized kit; they do not yet include sample chops, pitched instruments, swing timing, or distortion. They are original patterns, not transcriptions of songs.
 
 ## Playback notes
 

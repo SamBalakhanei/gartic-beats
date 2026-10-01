@@ -4,14 +4,14 @@ import { DrumMachine } from './music/DrumMachine'
 import { BARS, BPM, STEPS_PER_BAR, clearBar, createPreset, emptyPattern, instruments, toggleStep } from './music/pattern'
 import type { Instrument, Pattern, Preset } from './music/pattern'
 
-const presets: { id: Preset; label: string }[] = [
-  { id: 'sneaky', label: 'Sneaky steps' },
-  { id: 'dance', label: 'Nightclub' },
-  { id: 'clumsy', label: 'Clumsy robot' },
+const presets: { id: Preset; label: string; description: string }[] = [
+  { id: 'soul', label: 'Soul Chop', description: 'A laid-back pocket with syncopated kicks and skipping hats.' },
+  { id: 'stadium', label: 'Stadium Glow', description: 'Big backbeats, layered claps, and a closing tom fill.' },
+  { id: 'industrial', label: 'Industrial Stomp', description: 'Sparse kicks, metallic accents, and abrupt gaps.' },
 ]
 
 export default function App() {
-  const [pattern, setPattern] = useState(() => createPreset('sneaky'))
+  const [pattern, setPattern] = useState(() => createPreset('soul'))
   const patternRef = useRef(pattern)
   const history = useRef<Pattern[]>([])
   const machine = useRef<DrumMachine | null>(null)
@@ -21,7 +21,7 @@ export default function App() {
   const [step, setStep] = useState(-1)
   const [volume, setVolume] = useState(65)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('Sneaky steps loaded. Make it your own.')
+  const [message, setMessage] = useState('Soul Chop loaded. Make it your own.')
 
   useEffect(() => {
     const engine = new DrumMachine(patternRef.current, setStep, setPlaying)
@@ -162,8 +162,8 @@ export default function App() {
 
       <section className="starters" aria-labelledby="starters-title">
         <div><h2 id="starters-title">Need a starting point?</h2><p>Replace all four bars with a pattern, then change anything.</p></div>
-        <div className="preset-buttons">{presets.map(({ id, label }) => (
-          <button key={id} onClick={() => apply(createPreset(id), `${label} loaded across all four bars. Undo restores your beat.`)}>{label}<span aria-hidden="true"> ↗</span></button>
+        <div className="preset-buttons">{presets.map(({ id, label, description }) => (
+          <button key={id} title={description} onClick={() => apply(createPreset(id), `${label} loaded across all four bars. Undo restores your beat.`)}>{label}<span aria-hidden="true"> ↗</span></button>
         ))}</div>
       </section>
       {error && <p className="error" role="alert">{error}</p>}

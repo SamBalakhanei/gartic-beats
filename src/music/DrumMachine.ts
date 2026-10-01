@@ -1,5 +1,6 @@
 import { instruments, STEP_SECONDS, TOTAL_STEPS } from './pattern'
 import type { Instrument, Pattern } from './pattern'
+import { synthesizeDrum } from './sounds'
 
 // Schedule against the audio clock, not animation frames. The short lookahead
 // keeps timing steady while letting edits take effect during playback.
@@ -39,7 +40,15 @@ export class DrumMachine {
       this.context = new AudioContext()
       this.output = this.context.createGain()
       this.output.gain.value = this.volume * 0.5
-      this.output.connect(this.context.destination)
+      // Tame peaks when several of the eight voices overlap.
+      const compressor = this.context.createDynamicsCompressor()
+      compressor.threshold.value = -8
+      compressor.knee.value = 8
+      compressor.ratio.value = 12
+      compressor.attack.value = 0.003
+      compressor.release.value = 0.12
+      this.output.connect(compressor)
+      compressor.connect(this.context.destination)
       this.context.onstatechange = () => {
         if (this.context?.state !== 'running') this.stop()
       }
@@ -52,28 +61,9 @@ export class DrumMachine {
 
   private makeSound(id: Instrument) {
     const context = this.context!
-    const duration = { kick: 0.45, snare: 0.22, hat: 0.07, cowbell: 0.18 }[id]
-    const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate)
-    const data = buffer.getChannelData(0)
-    let lastNoise = 0
-    for (let i = 0; i < data.length; i++) {
-      const t = i / context.sampleRate
-      const attack = Math.min(1, t / 0.002)
-      const noise = Math.random() * 2 - 1
-      if (id === 'kick') {
-        const phase = 2 * Math.PI * (48 * t + 110 * 0.025 * (1 - Math.exp(-t / 0.025)))
-        data[i] = Math.sin(phase) * Math.exp(-t * 12) * attack
-      } else if (id === 'snare') {
-        data[i] = (noise * 0.65 + Math.sin(2 * Math.PI * 180 * t) * 0.3) * Math.exp(-t * 24) * attack
-      } else if (id === 'hat') {
-        data[i] = (noise - lastNoise) * 0.22 * Math.exp(-t * 65) * attack
-      } else {
-        data[i] = (Math.sin(2 * Math.PI * 540 * t) + Math.sin(2 * Math.PI * 800 * t)) * 0.22 * Math.exp(-t * 28) * attack
-      }
-      lastNoise = noise
-      // Bring the tail fully to zero to avoid a click at the buffer boundary.
-      data[i] *= Math.min(1, (duration - t) / 0.01)
-    }
+    const samples = synthesizeDrum(id, context.sampleRate)
+    const buffer = context.createBuffer(1, samples.length, context.sampleRate)
+    buffer.getChannelData(0).set(samples)
     return buffer
   }
 

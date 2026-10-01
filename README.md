@@ -4,7 +4,7 @@ A browser party game where friends turn silly prompts into music, then reinterpr
 
 ## Current scope
 
-A home screen, local lobby preview, and drum sandbox built with React, TypeScript, Vite, and the browser Web Audio API.
+A home screen, live local lobbies, and drum sandbox built with React, TypeScript, Vite, and the browser Web Audio API.
 
 - Eight synthesized sounds: kick, snare, closed hi-hat, clap, open hi-hat, low tom, rimshot, and cowbell. No audio downloads.
 - Four bars of 16 steps at 120 BPM: an eight-second loop.
@@ -12,9 +12,11 @@ A home screen, local lobby preview, and drum sandbox built with React, TypeScrip
 - Three starter patterns with deliberately sparse percussion, clear bar/all, and undo for the last 20 edits.
 - Keyboard-accessible buttons and a stacked beat layout on small screens.
 
-The home screen offers Create game and Go to Sandbox. Create game creates a local lobby with you as host; add local guest names to preview the roster. Start game appears only with a lobby and is disabled below two players. At two or more players it shows a readiness message; it does not start rounds yet. Guests are local entries, not connected users.
+The home screen offers Create game and Go to Sandbox. Enter a guest name to create a server-owned room, then share the invite link with another browser on the same computer. The roster updates live. Only the host can request Start, and the server requires two connected players. Start broadcasts a readiness message; game rounds are not implemented yet.
 
-Sandbox is the practice studio with a fixed example prompt. Navigation preserves the lobby and beat, stops audio when leaving the studio, and supports browser back/forward through hash links. Edits are held in memory and reset on refresh. Online rooms and joining, saved drafts, timers, submission, and reveal are not implemented yet.
+Lobby membership survives refresh through a private reconnect token in per-tab session storage. Disconnects reserve a player slot for 30 seconds. Leaving immediately releases the slot; an absent host transfers ownership when their grace period expires. Rooms are stored in memory and disappear on server restart (including Vite config/server code changes). Empty rooms are deleted.
+
+Sandbox navigation preserves the lobby connection and beat and stops audio when leaving the studio. Beat edits still reset on refresh. Timers, submissions, chain rotation, reveal, and public hosting are future steps.
 
 ## Run locally
 
@@ -29,17 +31,19 @@ Open http://localhost:5173 in your browser. Keep the terminal running; press Ctr
 
 ## Commands
 
-- `npm run dev`: start the local development server.
-- `npm test`: run pattern integrity, non-destructive editing, and sound-generation checks.
+- `npm run dev`: start the website and WebSocket lobby server together on port 5173.
+- `npm test`: run pattern integrity, non-destructive editing, and sound-generation checks, plus real WebSocket lobby integration tests.
 - `npm run typecheck`: check TypeScript without building.
 - `npm run build`: check TypeScript and build the site into `dist/`.
-- `npm run preview`: preview the production build locally after building.
+- `npm run preview`: preview the static production build only; lobby joining requires `npm run dev`. A production lobby service is not deployed yet.
 
 ## Files
 
 - `src/App.tsx`: home, local lobby, and sandbox navigation.
 - `src/Studio.tsx`: editor controls and pattern history.
-- `src/lobby/lobby.ts`: local roster operations and the two-player start rule.
+- `src/lobby/lobby.ts`: shared room/message types and the connected-player start rule.
+- `src/lobby/useLobby.ts`: browser connection, per-tab session restoration, and reconnect handling.
+- `server/lobby-server.ts`: authoritative in-memory room service, attached to Vite at `/lobby`.
 - `src/music/pattern.ts`: serializable pattern data and editing operations.
 - `src/music/DrumMachine.ts`: audio-clock scheduling and output compression for overlapping voices.
 - `src/music/sounds.ts`: eight synthesized percussion voices.
@@ -49,7 +53,19 @@ Open http://localhost:5173 in your browser. Keep the terminal running; press Ctr
 
 ## Next milestone
 
-Playtest this editor before adding game rounds and multiplayer.
+Add the first synchronized prompt round after testing local joining.
+
+## Try local joining
+
+1. Run `npm run dev` and open http://localhost:5173.
+2. Enter your name and select **Create game**, then **Copy link**.
+3. Paste the invite into a fresh tab or another browser window, enter a different name, and select **Join lobby**. Each tab has its own player session. If you duplicate an existing tab, copied session storage may first show an already-connected message; enter a name to join separately.
+4. Both rosters should update immediately. Start is enabled only for the host with at least two connected players.
+5. Refresh a joined tab: it should reclaim its player slot rather than create a duplicate.
+6. Leave as the host to see immediate host transfer, or close the host tab and wait 30 seconds for transfer.
+7. Open Sandbox and return: membership remains connected and your beat is preserved.
+
+A localhost invite works on this computer only. Do not send it to friends on other computers yet. No accounts or public deployment are included. If clipboard access fails, select and copy the visible invite field.
 
 ## Try the editor
 

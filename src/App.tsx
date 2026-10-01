@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import Studio from './Studio'
-import { addPlayer, canStart, createLobby, MAX_PLAYERS, removePlayer } from './lobby/lobby'
-import type { Lobby } from './lobby/lobby'
+import { canStart, MAX_PLAYERS } from './lobby/lobby'
+import { useLobby } from './lobby/useLobby'
 
 export default function App() {
   const [sandbox, setSandbox] = useState(window.location.hash === '#sandbox')
   const [visitedStudio, setVisitedStudio] = useState(sandbox)
-  const [lobby, setLobby] = useState<Lobby | null>(null)
+  const { lobby, session, invite, connected, pending, notice, status, send, clearInvite, setNotice } = useLobby()
   const [guestName, setGuestName] = useState('')
-  const [notice, setNotice] = useState('')
   const heading = useRef<HTMLHeadingElement>(null)
-  const nameInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const navigate = () => {
@@ -26,14 +24,12 @@ export default function App() {
     if (!sandbox) heading.current?.focus()
   }, [sandbox, lobby !== null])
 
-  function create() {
-    setLobby(createLobby())
-    setNotice('Lobby created. Add another player to get ready.')
-  }
+  const isHost = lobby?.hostId === session?.playerId
+  const inviteLink = lobby ? `${location.origin}${location.pathname}?room=${lobby.id}` : ''
 
-  function start() {
-    if (!lobby || !canStart(lobby)) return
-    setNotice('Your group is ready! Game rounds are coming in the next step.')
+  async function copyInvite() {
+    try { await navigator.clipboard.writeText(inviteLink); setNotice('Invite link copied.') }
+    catch { setNotice('Select and copy the invite link below.') }
   }
 
   return (
@@ -52,36 +48,32 @@ export default function App() {
           <section className="home-card lobby-card" aria-labelledby="lobby-title">
             <div className="card-heading"><h2 id="lobby-title">{lobby ? 'Your lobby' : 'Bring your friends'}</h2>{lobby && <span className="badge">{lobby.players.length} / {MAX_PLAYERS} players</span>}</div>
             {lobby ? <>
+              <p className="card-note" role="status">{status}</p>
+              <label className="invite-label" htmlFor="invite-link">Invite friends</label>
+              <div className="guest-input-row"><input id="invite-link" readOnly value={inviteLink} onFocus={event => event.target.select()} /><button className="secondary-button" onClick={() => void copyInvite()}>Copy link</button></div>
               <ul className="player-list" aria-label="Lobby players">
                 {lobby.players.map((player, index) => <li key={player.id}>
                   <span className="player-avatar" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="player-name">{player.name}</span>
-                  {player.id === lobby.hostId ? <span className="host-label">Host</span> : <button className="remove-player" onClick={() => {
-                    setLobby(removePlayer(lobby, player.id))
-                    setNotice(`${player.name} removed from the lobby.`)
-                  }} aria-label={`Remove ${player.name}`}>Remove</button>}
+                  <span className="player-name">{player.name}{player.id === session?.playerId ? ' (you)' : ''}<small className="player-connection">{player.connected && connected ? 'Connected' : 'Reconnecting…'}</small></span>
+                  {player.id === lobby.hostId && <span className="host-label">Host</span>}
                 </li>)}
               </ul>
+              {isHost && <button className="play-button home-primary" onClick={() => send('start')} disabled={!connected || pending || !canStart(lobby)} aria-describedby="start-help">Start game</button>}
+              <p id="start-help" className="card-note">{!isHost ? 'Waiting for the host to start.' : canStart(lobby) ? 'Ready to start. Game rounds are coming next.' : 'At least 2 connected players are needed to start.'}</p>
+              <p className="local-note">Local server · Open the invite in another browser tab to join.</p>
+              <button className="text-button" disabled={!connected || pending} onClick={() => send('leave')}>Leave lobby</button>
+            </> : <>
+              <p>{invite ? 'You’re invited! Enter your name to join the lobby.' : 'Create a lobby and share its link with your friends.'}</p>
               <form className="guest-form" onSubmit={event => {
                 event.preventDefault()
-                if (!guestName.trim() || lobby.players.length >= MAX_PLAYERS) return
-                setLobby(addPlayer(lobby, guestName, crypto.randomUUID()))
-                setNotice(`${guestName.trim()} added to the lobby.`)
-                setGuestName('')
-                nameInput.current?.focus()
+                send(invite ? 'join' : 'create', { name: guestName, roomId: invite })
               }}>
-                <label htmlFor="guest-name">Add a local player</label>
-                <div className="guest-input-row"><input ref={nameInput} id="guest-name" value={guestName} onChange={event => setGuestName(event.target.value)} maxLength={24} placeholder="Guest name" autoComplete="off" disabled={lobby.players.length >= MAX_PLAYERS} />
-                  <button className="secondary-button" type="submit" disabled={!guestName.trim() || lobby.players.length >= MAX_PLAYERS}>Add player</button></div>
+                <label htmlFor="guest-name">Your name</label>
+                <div className="guest-input-row"><input id="guest-name" value={guestName} onChange={event => setGuestName(event.target.value)} maxLength={24} placeholder="Guest name" autoComplete="nickname" required /></div>
+                <button className="play-button home-primary" disabled={!connected || pending || !guestName.trim()} type="submit">{pending ? 'Connecting…' : invite ? 'Join lobby' : 'Create game'}</button>
               </form>
-              <button className="play-button home-primary" onClick={start} disabled={!canStart(lobby)} aria-describedby="start-help">Start game</button>
-              <p id="start-help" className="card-note">{canStart(lobby) ? 'Ready to start. Game rounds are coming next.' : 'At least 2 players are needed to start.'}</p>
-              <p className="local-note">Local lobby preview · Online invites and joining come next.</p>
-              <button className="text-button" onClick={() => { setLobby(null); setGuestName(''); setNotice('Lobby closed.') }}>Close lobby</button>
-            </> : <>
-              <p>A new lobby starts with you. Get your group ready for musical telephone.</p>
-              <button className="play-button home-primary" onClick={create}>Create game</button>
-              <p className="card-note">2–8 players · No musical experience needed</p>
+              {invite && <button className="text-button" disabled={pending} onClick={clearInvite}>Create a different lobby</button>}
+              <p className="card-note" role="status">{status} · 2–8 players</p>
             </>}
           </section>
           <section className="home-card sandbox-card" aria-labelledby="sandbox-title">
@@ -93,7 +85,7 @@ export default function App() {
             <p className="card-note">No lobby needed. Your beat stays when you come back.</p>
           </section>
         </div>
-        <footer className="page-footer"><p role="status">{notice}</p><p>Lobby and beat reset on refresh</p></footer>
+        <footer className="page-footer"><p role="status">{notice}</p><p>Rooms last until the server restarts · Beats reset on refresh</p></footer>
       </main>
       {visitedStudio && <div hidden={!sandbox}><Studio active={sandbox} hasLobby={lobby !== null} /></div>}
     </>

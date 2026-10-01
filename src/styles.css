@@ -152,3 +152,6 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
   .home-card { padding: 22px; }
 }
 @media (max-width: 400px) { .guest-input-row { flex-direction: column; } }
+
+.invite-label { display: block; margin: 18px 0 10px; font-size: 0.875rem; }
+.player-connection { display: block; margin-top: 4px; color: #b9b8cb; font-size: 0.75rem; }

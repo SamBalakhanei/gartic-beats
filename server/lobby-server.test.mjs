@@ -291,3 +291,19 @@ test('only the current host controls the shared reveal; reconnects and host hand
   resumed.send({ type: 'reveal', gameId, action: 'previous', revision: 3 }); await resumed.next('ack')
   assert.equal((await resumed.next('room', m => m.room.game?.reveal.revision === 4)).room.game.reveal.index, 0)
 })
+
+test('four maximum-length high-quality vocal layers survive save and reconnect', async t => {
+  const connect = await setup(t, 2000)
+  const round = await startRound(connect)
+  await submitBothPrompts(round)
+  const voice = withVoice({ bpm: 40 }).voice
+  const song = { bpm: 40, pattern: emptyPattern(), vocals: Array.from({ length: 4 }, (_, index) => ({ id: `hq-${index}`, name: `Layer ${index + 1}`, voice, bpm: 40, startStep: 0, volume: 0.8 })), mix: { beat: 0.5, voice: 0.9 } }
+  assert.ok(JSON.stringify(song).length > 12_000_000)
+  round.guest.send({ type: 'draft', gameId: round.gameId, song, revision: 1 })
+  assert.equal((await round.guest.next('draft_saved')).revision, 1)
+  round.guest.socket.close()
+  await round.host.next('room', m => m.room.players.some(p => !p.connected))
+  const restored = await connect()
+  restored.send({ type: 'resume', ...round.joined.session })
+  assert.deepEqual((await restored.next('joined')).room.game.mine.song, song)
+})

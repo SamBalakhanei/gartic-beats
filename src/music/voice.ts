@@ -1,4 +1,4 @@
-export const VOICE_SAMPLE_RATE = 16000
+export const VOICE_SAMPLE_RATE = 48000
 export const MAX_VOICE_BYTES = 44 + 24 * VOICE_SAMPLE_RATE * 2
 export type VoiceTrack = { data: string; bpm: number }
 
@@ -28,10 +28,12 @@ export function validateVoice(value: unknown): VoiceTrack {
   if (bytes.length < 44 || bytes.length > MAX_VOICE_BYTES) throw new Error('Voice recording is too large or incomplete.')
   const view = new DataView(bytes.buffer)
   const text = (start: number, length: number) => String.fromCharCode(...bytes.slice(start, start + length))
-  const expectedSamples = Math.round(960 / track.bpm * VOICE_SAMPLE_RATE)
+  // Accept older saved takes without upsampling or changing their audio.
+  const sampleRate = view.getUint32(24, true)
+  const expectedSamples = Math.round(960 / track.bpm * sampleRate)
   if (text(0, 4) !== 'RIFF' || text(8, 4) !== 'WAVE' || text(12, 4) !== 'fmt ' || text(36, 4) !== 'data' ||
       view.getUint32(4, true) !== bytes.length - 8 || view.getUint32(16, true) !== 16 || view.getUint16(20, true) !== 1 ||
-      view.getUint16(22, true) !== 1 || view.getUint32(24, true) !== VOICE_SAMPLE_RATE || view.getUint32(28, true) !== VOICE_SAMPLE_RATE * 2 ||
+      view.getUint16(22, true) !== 1 || ![16000, VOICE_SAMPLE_RATE].includes(sampleRate) || view.getUint32(28, true) !== sampleRate * 2 ||
       view.getUint16(32, true) !== 2 || view.getUint16(34, true) !== 16 || view.getUint32(40, true) !== bytes.length - 44 || bytes.length !== 44 + expectedSamples * 2) throw new Error('Voice recording must match one loop at its recorded BPM.')
   let energy = 0
   for (let i = 44; i < bytes.length; i += 2) energy += (view.getInt16(i, true) / 32768) ** 2

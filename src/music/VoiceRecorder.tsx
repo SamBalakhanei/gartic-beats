@@ -56,11 +56,11 @@ export default function VoiceRecorder(props: Props) {
       if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw new Error('Microphone recording requires a supported browser on localhost or HTTPS.')
       await current.current.prepareBeat()
       if (!valid()) return
-      const media = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 }, video: false })
+      const media = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: { ideal: VOICE_SAMPLE_RATE }, channelCount: { ideal: 1 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false })
       if (!valid()) { media.getTracks().forEach(track => track.stop()); return }
       stream.current = media
-      const mimeType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find(type => MediaRecorder.isTypeSupported(type))
-      const take = new MediaRecorder(media, mimeType ? { mimeType } : undefined)
+      const mimeType = ['audio/webm;codecs=pcm', 'audio/wav', 'audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type))
+      const take = new MediaRecorder(media, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 256000 })
       recorder.current = take
       const chunks: BlobPart[] = []
       let offset = 0
@@ -74,16 +74,17 @@ export default function VoiceRecorder(props: Props) {
         let context: AudioContext | undefined
         try {
           if (performance.now() - recordingStart < 500) throw new Error('Record at least half a second before stopping.')
-          context = new AudioContext()
+          context = new AudioContext({ sampleRate: VOICE_SAMPLE_RATE })
           const decoded = await context.decodeAudioData(await new Blob(chunks, { type: take.mimeType }).arrayBuffer())
-          const samples = new Float32Array(Math.round(duration * VOICE_SAMPLE_RATE))
-          const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i))
-          for (let i = 0; i < samples.length; i++) {
-            const position = (i / VOICE_SAMPLE_RATE + offset) * decoded.sampleRate
-            const index = Math.floor(position), fraction = position - index
-            if (index + 1 >= decoded.length) break
-            samples[i] = channels.reduce((sum, channel) => sum + channel[index] * (1 - fraction) + channel[index + 1] * fraction, 0) / channels.length
-          }
+          // Let the browser resample and downmix; avoid linear interpolation,
+          // which can dull the high end when the microphone uses another rate.
+          const render = new OfflineAudioContext(1, Math.round(duration * VOICE_SAMPLE_RATE), VOICE_SAMPLE_RATE)
+          const source = render.createBufferSource()
+          source.buffer = decoded
+          source.connect(render.destination)
+          source.start(0, Math.min(offset, decoded.duration))
+          const rendered = await render.startRendering()
+          const samples = rendered.getChannelData(0)
           const bytes = encodeVoice(samples)
           let binary = ''
           for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192))

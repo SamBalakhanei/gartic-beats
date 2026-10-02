@@ -1,3 +1,5 @@
+import { MAX_VOICE_BYTES } from '../src/music/voice.ts'
+import { MAX_VOCAL_LAYERS } from '../src/music/arrangement.ts'
 import { controlReveal, createGame, departGame, finishIfReady, gameView, saveSong, submitPrompt } from './game.ts'
 import type { Game } from './game.ts'
 import { MUSIC_DURATION_MS } from '../src/game/types.ts'
@@ -15,7 +17,7 @@ type Room = { id: string; hostId: string; players: Member[]; game?: Game; gameTi
 export function attachLobbyServer(server: EventEmitter, graceMs = 30_000, musicDuration = MUSIC_DURATION_MS) {
   const rooms = new Map<string, Room>()
   const membership = new Map<WebSocket, { room: Room; player: Member }>()
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 4_300_000 })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_VOCAL_LAYERS * Math.ceil(MAX_VOICE_BYTES / 3) * 4 + 256_000 })
   let closed = false
   const send = (socket: WebSocket, message: ServerMessage) => {
     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message))

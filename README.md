@@ -111,7 +111,7 @@ For manual checks, test playback, stop/restart, volume at zero, all three preset
 
 ## Voice recording
 
-Microphone access is requested only when Record voice is pressed. Takes are converted to mono 16 kHz PCM WAV, stored in the current room's memory with the song, and revealed only with results. Recording lasts one loop (4–24 seconds), or can be stopped early; early takes are padded with silence. Re-recording keeps the previous take until a replacement succeeds. A silent take is rejected, but the app does not attempt speech recognition or judge the lyrics.
+Microphone access is requested only when Record voice is pressed. Takes are converted to mono 48 kHz, 16-bit PCM WAV, stored in the current room's memory with the song, and revealed only with results. Recording lasts one loop (4–24 seconds), or can be stopped early; early takes are padded with silence. Re-recording keeps the previous take until a replacement succeeds. A silent take is rejected, but the app does not attempt speech recognition or judge the lyrics.
 
 The microphone is released after stopping, cancelling, hiding/leaving the page, or the turn ending. Permission denial and unsupported browsers show an error. A recording still being processed at the deadline is not included: results use the last completed server-saved take. Beat-only timeout results are explicitly labeled.
 
@@ -127,3 +127,6 @@ The mixer saves separate beat and voice levels, plus each layer's own volume. Dr
 Results show one player's song and assigned prompt at a time. The server owns the current reveal and only the current room host can move Previous/Next or Play/Stop for everyone. Changing songs stops playback. Only the current result is sent in reveal snapshots, and reconnecting restores that selection. Host transfer uses the existing lobby rules.
 
 Each device must enable sound once; listeners can mute locally. Playback follows host commands but is not sample-synchronized across devices. Enabling sound mid-song or returning to the tab starts the current loop locally. On the final song, the host can revisit earlier songs with Previous.
+
+
+Recording quality is automatic: the browser is asked for a 48 kHz mono microphone signal with speech processing (echo cancellation, noise suppression, and automatic gain) disabled. Capture prefers PCM when supported, otherwise requests 256 kbps compressed audio. Browser/device support determines the actual capture format; saving a WAV does not undo compression applied during capture. Browser audio rendering handles resampling and downmixing. Older 16 kHz takes remain playable. Headphones avoid capturing the beat from speakers. Four maximum-length recordings fit the server message limit; audio remains in RAM.

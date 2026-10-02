@@ -38,7 +38,7 @@ test('shared playback engine overlaps layers with saved pitch and independent ga
     async resume() {} async close() {}
     createGain() { const node = { gain: param(), connect(to) { this.to = to }, disconnect() {} }; this.gains.push(node); return node }
     createDynamicsCompressor() { return { threshold: param(), knee: param(), ratio: param(), attack: param(), release: param(), connect() {} } }
-    createBuffer(_, size) { return { getChannelData: () => new Float32Array(size) } }
+    createBuffer(_, size) { return { duration: size / this.sampleRate, getChannelData: () => new Float32Array(size) } }
     async decodeAudioData() { return { vocal: true } }
     createBufferSource() { const source = { playbackRate: param(), connect(to) { this.to = to }, disconnect() {}, start(at, offset = 0) { this.at = at; this.offset = offset }, stop(at) { this.end = at } }; this.sources.push(source); return source }
   }
@@ -71,6 +71,38 @@ test('shared playback engine overlaps layers with saved pitch and independent ga
   assert.equal(trimmedSource.offset, 0.5)
   assert.ok(Math.abs(trimmedSource.at - 0.1025) < 1e-9)
   assert.ok(Math.abs(trimmedSource.end - trimmedSource.at - 0.5) < 1e-9)
+
+  // Drive the scheduler explicitly; no browser, speakers or wall-clock wait.
+  let tick
+  t.mock.method(globalThis, 'setInterval', callback => { tick = callback; return 0 })
+  const pianoSong = { ...song, bpm: 240, vocals: [], piano: { root: 0, mode: 'major', warmth: 0.5, swing: 0.3, volume: 0.4, notes: [
+    { id: 'p', start: 0, degree: 0, length: 4, velocity: 0.8 },
+    { id: 'q', start: 1, degree: 2, length: 2, velocity: 0.6 },
+  ] } }
+  const pianoSnapshots = []
+  for (let pass = 0; pass < 2; pass++) {
+    const pianoEngine = new DrumMachine(pianoSong.pattern, () => {}, () => {})
+    engines.push(pianoEngine)
+    await pianoEngine.start(pianoSong)
+    const context = contexts.at(-1)
+    assert.equal(context.sources.length, 1)
+    const first = context.sources[0]
+    assert.equal(first.at, 0.04)
+    assert.equal(first.to.to.gain.value, 0.4)
+    assert.ok(Math.abs(first.to.gain.value - 0.6) < 1e-9)
+    assert.ok(first.end > first.at)
+    context.currentTime = 0.02
+    tick()
+    assert.equal(context.sources.length, 2)
+    const second = context.sources[1]
+    assert.ok(Math.abs(second.at - (0.04 + 15 / 240 * 1.3)) < 1e-9)
+    pianoSnapshots.push(context.sources.map(source => ({ at: source.at, end: source.end, gain: source.to.gain.value, volume: source.to.to.gain.value, duration: source.buffer.duration })))
+    pianoEngine.setSong({ ...pianoSong, piano: { ...pianoSong.piano, volume: 0.2 } })
+    assert.equal(first.to.to.gain.value, 0.2)
+    pianoEngine.stop()
+  }
+  assert.deepEqual(pianoSnapshots[0], pianoSnapshots[1])
+
 })
 
 

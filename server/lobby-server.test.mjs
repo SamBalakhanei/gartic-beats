@@ -180,7 +180,7 @@ test('full round keeps assignments private, restores saved drafts, then reveals 
   late.send({ type: 'join', roomId: created.room.id, name: 'Too late' })
   assert.equal((await late.next('error')).code, 'in_progress')
   const voice = withVoice({ bpm: 93 }).voice
-  const song = { pattern: emptyPattern(), bpm: 93, mix: { beat: 0.35, voice: 0.9 }, vocals: [
+  const song = { pattern: emptyPattern(), bpm: 93, mix: { beat: 0.35, voice: 0.9 }, piano: { root: 3, mode: 'minor', volume: 0.4, warmth: 0.8, swing: 0.2, notes: [{ id: 'keys', degree: 2, start: 4, length: 3, velocity: 0.6 }] }, vocals: [
     { id: 'lead', name: 'Lead', voice, bpm: 186, startStep: 0.5, volume: 0.8, trimStart: 0.25, trimEnd: 4 },
     { id: 'harmony', name: 'Harmony', voice, bpm: 93, startStep: 16, volume: 0.5 },
   ] }

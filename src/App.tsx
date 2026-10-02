@@ -35,7 +35,7 @@ export default function App() {
 
   return (
     <>
-      {lobby?.game && <GameScreen key={lobby.game.id} game={lobby.game} connected={connected} pending={pending} notice={notice} savedRevision={savedRevision} send={send} saveDraft={saveDraft} />}
+      {lobby?.game && <GameScreen isHost={!!isHost} hostName={lobby.players.find(player => player.id === lobby.hostId)?.name ?? 'Host'} hostConnected={!!lobby.players.find(player => player.id === lobby.hostId)?.connected} key={lobby.game.id} game={lobby.game} connected={connected} pending={pending} notice={notice} savedRevision={savedRevision} send={send} saveDraft={saveDraft} />}
       <main className="app home-app" hidden={sandbox || !!lobby?.game}>
         <header className="brand-row">
           <a className="brand" href="#home" aria-label="Beat Telephone home">beat<span>telephone</span><span className="brand-dot">.</span></a>

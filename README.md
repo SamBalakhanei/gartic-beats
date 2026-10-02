@@ -120,3 +120,10 @@ Changing beat BPM keeps every recording. Each vocal layer has an independent sam
 Record beside the BPM control, in either the sandbox or a game. Up to four vocal layers can overlap. Select a timeline lane to edit its name, sample BPM, volume, and start position. Drag a clip to move it, or drag either edge to trim the audio without changing pitch. Snap rounds edits to the step grid; turn it off or hold Shift for fine placement. Arrow keys move a focused clip or trim handle, Escape cancels a drag, and Undo reverses one complete gesture. Reset trim restores the original source range. Edits preview while dragging and save on release. Each clip plays once per four-bar loop; tails beyond the last bar are cut off. Recording a new layer plays the current mix for reference; use headphones to avoid recording speaker audio.
 
 The mixer saves separate beat and voice levels, plus each layer's own volume. Drafts save after a short 200 ms pause in editing; manual submission sends the complete current song. Reconnecting restores these settings, and the post-game player uses the same audio engine and mix. Sandbox changes last for the current page session. Audio remains in server memory and is lost when the server restarts.
+
+
+## Shared reveal
+
+Results show one player's song and assigned prompt at a time. The server owns the current reveal and only the current room host can move Previous/Next or Play/Stop for everyone. Changing songs stops playback. Only the current result is sent in reveal snapshots, and reconnecting restores that selection. Host transfer uses the existing lobby rules.
+
+Each device must enable sound once; listeners can mute locally. Playback follows host commands but is not sample-synchronized across devices. Enabling sound mid-song or returning to the tab starts the current loop locally. On the final song, the host can revisit earlier songs with Previous.

@@ -1,4 +1,4 @@
-import { createGame, departGame, finishIfReady, gameView, saveSong, submitPrompt } from './game.ts'
+import { controlReveal, createGame, departGame, finishIfReady, gameView, saveSong, submitPrompt } from './game.ts'
 import type { Game } from './game.ts'
 import { MUSIC_DURATION_MS } from '../src/game/types.ts'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -130,6 +130,15 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000, musicD
         current.room.game = createGame(current.room.players.filter(player => player.socket?.readyState === WebSocket.OPEN))
         send(socket, { type: 'ack' })
         broadcast(current.room)
+      } else if (message.type === 'reveal') {
+        if (current.room.hostId !== current.player.id) { fail('host_only', 'Only the host can control the reveal.'); return }
+        const game = current.room.game
+        try {
+          if (!game || message.gameId !== game.id) throw new Error('This request belongs to a different game.')
+          controlReveal(game, message.action, message.revision)
+          broadcast(current.room)
+          send(socket, { type: 'ack' })
+        } catch (error) { fail('game', error instanceof Error ? error.message : 'Unable to update the reveal.') }
       } else if (['prompt', 'draft', 'submit_song'].includes(String(message.type))) {
         const game = current.room.game
         if (!game) { fail('no_game', 'Start a game first.'); return }

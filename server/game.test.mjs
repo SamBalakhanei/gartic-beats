@@ -1,7 +1,7 @@
 import { withVoice } from './test-voice.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createGame, submitPrompt, saveSong, gameView, validateSong, finishIfReady } from './game.ts'
+import { controlReveal, createGame, submitPrompt, saveSong, gameView, validateSong, finishIfReady } from './game.ts'
 import { emptyPattern } from '../src/music/pattern.ts'
 
 test('random assignment never gives a player their own prompt and uses every prompt exactly once', () => {
@@ -36,7 +36,7 @@ test('prompt and song validation reject malformed input and do not mutate saved 
   assert.throws(() => saveSong(game, 'a', song, true, 600000))
   assert.equal(game.phase, 'results')
   finishIfReady(game, 700000)
-  assert.equal(gameView(game, 'a', 700000).results.length, 2)
+  assert.equal(gameView(game, 'a', 700000).results.length, 1)
 })
 
 
@@ -50,8 +50,10 @@ test('manual submission requires a voice track while deadline fallback accepts b
   finishIfReady(game, 600000)
   const results = gameView(game, 'a', 600000).results
   assert.ok(results[0].song.voice)
-  assert.equal(results[1].song.voice, undefined)
-  assert.equal(results[1].automatic, true)
+  controlReveal(game, 'next', 0)
+  const second = gameView(game, 'a', 600000).results[0]
+  assert.equal(second.song.voice, undefined)
+  assert.equal(second.automatic, true)
 })
 
 test('tempo changes preserve the original take and its recording tempo through save and reveal', () => {
@@ -65,4 +67,25 @@ test('tempo changes preserve the original take and its recording tempo through s
   assert.equal(result.song.bpm, 80)
   assert.equal(result.song.voice.bpm, 120)
   assert.equal(result.song.voice.data, original.voice.data)
+})
+
+
+test('reveal exposes one song, bounds navigation and rejects stale commands', () => {
+  const game = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }])
+  assert.throws(() => controlReveal(game, 'next', 0), /not started/)
+  submitPrompt(game, 'a', 'First', 0); submitPrompt(game, 'b', 'Second', 0)
+  finishIfReady(game, 600000)
+  assert.deepEqual(game.reveal, { index: 0, playing: false, revision: 0 })
+  assert.deepEqual(gameView(game, 'a', 600000).results.map(r => r.playerId), ['a'])
+  assert.throws(() => controlReveal(game, 'previous', 0))
+  assert.throws(() => controlReveal(game, 'jump', 0))
+  controlReveal(game, 'play', 0)
+  assert.equal(game.reveal.playing, true)
+  assert.throws(() => controlReveal(game, 'next', 0), /moved on/)
+  controlReveal(game, 'next', 1)
+  assert.deepEqual(game.reveal, { index: 1, playing: false, revision: 2 })
+  assert.deepEqual(gameView(game, 'a', 600000).results.map(r => r.playerId), ['b'])
+  assert.throws(() => controlReveal(game, 'next', 2))
+  controlReveal(game, 'previous', 2)
+  assert.equal(game.reveal.index, 0)
 })

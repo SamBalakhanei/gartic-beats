@@ -1,18 +1,17 @@
-import { DEFAULT_MIX, songVocals } from '../music/arrangement'
+import Results from './Results'
 import { useEffect, useRef, useState } from 'react'
 import Studio from '../Studio'
-import { DrumMachine } from '../music/DrumMachine'
-import { emptyPattern } from '../music/pattern'
 import { MAX_PROMPT_LENGTH } from './types'
 import type { GameView, Song } from './types'
 
 type Props = {
+  isHost: boolean; hostName: string; hostConnected: boolean
   game: GameView; connected: boolean; pending: boolean; notice: string; savedRevision: number
   send: (type: string, extra?: Record<string, unknown>) => void
   saveDraft: (extra: Record<string, unknown>) => boolean
 }
 
-export default function GameScreen({ game, connected, pending, notice, savedRevision, send, saveDraft }: Props) {
+export default function GameScreen({ isHost, hostName, hostConnected, game, connected, pending, notice, savedRevision, send, saveDraft }: Props) {
   const [prompt, setPrompt] = useState(game.phase === 'prompts' ? game.mine?.prompt ?? '' : '')
   const [seconds, setSeconds] = useState(600)
   const [revision, setRevision] = useState(0)
@@ -52,8 +51,8 @@ export default function GameScreen({ game, connected, pending, notice, savedRevi
 
   return <main className="app home-app">
     <header className="brand-row"><span className="brand">beat<span>telephone</span><span className="brand-dot">.</span></span><button className="secondary-button" disabled={disabled} onClick={() => send('leave')}>Leave game</button></header>
-    <section className="home-intro"><p className="eyebrow">{game.phase === 'results' ? 'The listening party' : 'It starts with an idea'}</p><h1 ref={heading} tabIndex={-1}>{game.phase === 'results' ? 'Hear what happened.' : 'Write something worth a beat.'}</h1><p>{game.phase === 'results' ? 'Each person made one song from someone else’s prompt. Press Play to listen.' : 'Give someone a scene, a mood, or something ridiculous. Your prompt will go to another player.'}</p></section>
-    {game.phase === 'results' ? <Results game={game} /> : mine ? <section className="home-card">
+    <section className="home-intro"><p className="eyebrow">{game.phase === 'results' ? 'The listening party' : 'It starts with an idea'}</p><h1 ref={heading} tabIndex={-1}>{game.phase === 'results' ? 'Hear what happened.' : 'Write something worth a beat.'}</h1><p>{game.phase === 'results' ? 'One song at a time. The host leads the listening party.' : 'Give someone a scene, a mood, or something ridiculous. Your prompt will go to another player.'}</p></section>
+    {game.phase === 'results' ? <Results game={game} isHost={isHost} hostName={hostName} hostConnected={hostConnected} connected={connected} pending={pending} send={send} /> : mine ? <section className="home-card">
       {mine.promptSubmitted ? <><h2>Prompt submitted!</h2><p>Waiting for everyone to finish writing. Your 10 minutes starts when all prompts are ready.</p></> : <form className="prompt-form" onSubmit={event => { event.preventDefault(); send('prompt', { gameId: game.id, prompt }) }}>
         <label htmlFor="game-prompt">Your prompt</label><textarea id="game-prompt" maxLength={MAX_PROMPT_LENGTH} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="A raccoon breaking into a nightclub" rows={4} required disabled={disabled} />
         <span>{prompt.length} / {MAX_PROMPT_LENGTH}</span><button className="play-button" disabled={disabled || !prompt.trim()}>Submit prompt</button>
@@ -62,35 +61,4 @@ export default function GameScreen({ game, connected, pending, notice, savedRevi
     </section> : <p>This round is already underway. You can listen when the results are ready.</p>}
     <footer className="page-footer"><p role="status">{connectionNote || notice}</p><p>One song per player</p></footer>
   </main>
-}
-
-function Results({ game }: { game: GameView }) {
-  const engine = useRef<DrumMachine | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
-  const [playing, setPlaying] = useState(false)
-  const [starting, setStarting] = useState(false)
-  const [error, setError] = useState('')
-  useEffect(() => {
-    const machine = new DrumMachine(emptyPattern(), () => {}, setPlaying)
-    engine.current = machine
-    const onHide = () => { if (document.hidden) machine.stop() }
-    document.addEventListener('visibilitychange', onHide)
-    return () => { machine.dispose(); document.removeEventListener('visibilitychange', onHide); engine.current = null }
-  }, [])
-  return <div className="results-list">
-    {game.results.map(result => <article className="home-card result-card" key={result.playerId}>
-      <div className="card-heading"><h2>{result.name}</h2><button className="play-button" disabled={starting} aria-label={`${playing && selected === result.playerId ? 'Stop' : 'Play'} ${result.name}’s song`} onClick={async () => {
-        if (playing && selected === result.playerId) { engine.current?.stop(); return }
-        setStarting(true); setError(''); setSelected(result.playerId)
-        try { engine.current?.setPattern(result.song.pattern); engine.current?.setBpm(result.song.bpm); await engine.current?.start(result.song) }
-        catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to play this song.') }
-        finally { setStarting(false) }
-      }}>{playing && selected === result.playerId ? 'Stop' : 'Play'}</button></div>
-      <blockquote>“{result.prompt}”</blockquote>
-      <p className="card-note">{songVocals(result.song).length} vocal layers · {result.song.piano?.notes.length ?? 0} piano notes · Piano {Math.round((result.song.piano?.volume ?? 0.65) * 100)}% · Beat {Math.round((result.song.mix ?? DEFAULT_MIX).beat * 100)}% · Voice {Math.round((result.song.mix ?? DEFAULT_MIX).voice * 100)}%</p>
-      {!songVocals(result.song).length && <p className="card-note">Instrumental — no completed voice take was saved.</p>}<p className="card-note">Prompt by {result.promptAuthor} · {result.song.bpm} BPM{result.automatic ? ' · Saved automatically' : ''}</p>
-      {!result.song.piano?.notes.length && !songVocals(result.song).length && !Object.values(result.song.pattern).some(track => track.some(Boolean)) && <p className="card-note">No notes were added to this song.</p>}
-    </article>)}
-    {error && <p role="alert" className="error">{error}</p>}
-  </div>
 }

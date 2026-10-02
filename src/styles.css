@@ -354,3 +354,17 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
   .studio-sidebar .mix-level { margin: 10px; }
 }
 select:focus-visible { outline: 3px solid #f4f2ff; outline-offset: 3px; }
+
+.reveal-stage { max-width: 780px; margin: 0 auto; }
+.reveal-progress { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: #c6c4d6; font-size: .85rem; }
+.reveal-stage progress { width: 100%; height: 6px; accent-color: #bba4ff; margin: 14px 0 20px; }
+.reveal-card { text-align: center; padding: 28px; }
+.reveal-card h2 { font-size: clamp(1.5rem, 4vw, 2.3rem); margin: 0 0 20px; overflow-wrap: anywhere; }
+.reveal-card blockquote { margin: 0; font-size: clamp(1.15rem, 3vw, 1.6rem); line-height: 1.5; overflow-wrap: anywhere; }
+.reveal-disc { width: 76px; height: 76px; margin: 22px auto 14px; border-radius: 50%; display: grid; place-items: center; background: repeating-radial-gradient(#292434 0 5px, #494055 6px 7px); color: #c2ff8a; font-size: 2rem; border: 2px solid #6b5b83; }
+.reveal-disc.playing { animation: reveal-pulse 1s ease-in-out infinite alternate; }
+@keyframes reveal-pulse { to { box-shadow: 0 0 0 8px #bba4ff20; border-color: #c2ff8a; } }
+.reveal-controls { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.reveal-wait { text-align: center; color: #b9b8cb; line-height: 1.6; }
+@media (prefers-reduced-motion: reduce) { .reveal-disc.playing { animation: none; border-color: #c2ff8a; } }
+@media (max-width: 600px) { .reveal-controls button { flex: 1; } .reveal-controls .play-button { order: -1; flex-basis: 100%; } .reveal-card { padding: 22px 16px; } }

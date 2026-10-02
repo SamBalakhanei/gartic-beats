@@ -1,3 +1,4 @@
+import Brand from './Brand'
 import { useEffect, useRef, useState } from 'react'
 import Studio from './Studio'
 import GameScreen from './game/GameScreen'
@@ -7,7 +8,7 @@ import { useLobby } from './lobby/useLobby'
 export default function App() {
   const [sandbox, setSandbox] = useState(window.location.hash === '#sandbox')
   const [visitedStudio, setVisitedStudio] = useState(sandbox)
-  const { lobby, session, invite, connected, pending, notice, status, send, saveDraft, savedRevision, clearInvite, setNotice } = useLobby()
+  const { lobby, session, invite, connected, pending, notice, status, send, saveDraft, savedRevision, clearInvite, setNotice, goHome } = useLobby()
   const [guestName, setGuestName] = useState('')
   const heading = useRef<HTMLHeadingElement>(null)
 
@@ -28,6 +29,8 @@ export default function App() {
   const isHost = lobby?.hostId === session?.playerId
   const inviteLink = lobby ? `${location.origin}${location.pathname}?room=${lobby.id}` : ''
 
+  function home() { goHome(); setSandbox(false); setVisitedStudio(false); setGuestName('') }
+
   async function copyInvite() {
     try { await navigator.clipboard.writeText(inviteLink); setNotice('Invite link copied.') }
     catch { setNotice('Select and copy the invite link below.') }
@@ -35,10 +38,10 @@ export default function App() {
 
   return (
     <>
-      {lobby?.game && <GameScreen isHost={!!isHost} hostName={lobby.players.find(player => player.id === lobby.hostId)?.name ?? 'Host'} hostConnected={!!lobby.players.find(player => player.id === lobby.hostId)?.connected} key={lobby.game.id} game={lobby.game} connected={connected} pending={pending} notice={notice} savedRevision={savedRevision} send={send} saveDraft={saveDraft} />}
+      {lobby?.game && <GameScreen onHome={home} isHost={!!isHost} hostName={lobby.players.find(player => player.id === lobby.hostId)?.name ?? 'Host'} hostConnected={!!lobby.players.find(player => player.id === lobby.hostId)?.connected} key={lobby.game.id} game={lobby.game} connected={connected} pending={pending} notice={notice} savedRevision={savedRevision} send={send} saveDraft={saveDraft} />}
       <main className="app home-app" hidden={sandbox || !!lobby?.game}>
         <header className="brand-row">
-          <a className="brand" href="#home" aria-label="Beat Telephone home">beat<span>telephone</span><span className="brand-dot">.</span></a>
+          <Brand onHome={home} />
           <span className="badge">Make a little noise</span>
         </header>
         <section className="home-intro">
@@ -89,7 +92,7 @@ export default function App() {
         </div>
         <footer className="page-footer"><p role="status">{notice}</p><p>Rooms last until the server restarts · Beats reset on refresh</p></footer>
       </main>
-      {visitedStudio && <div hidden={!sandbox || !!lobby?.game}><Studio active={sandbox && !lobby?.game} hasLobby={lobby !== null} /></div>}
+      {visitedStudio && <div hidden={!sandbox || !!lobby?.game}><Studio onHome={home} active={sandbox && !lobby?.game} hasLobby={lobby !== null} /></div>}
     </>
   )
 }

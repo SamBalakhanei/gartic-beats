@@ -28,6 +28,7 @@ export function useLobby() {
   const sessionRef = useRef(session)
   const socket = useRef<WebSocket | null>(null)
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [connectionVersion, setConnectionVersion] = useState(0)
   const [status, setStatus] = useState('Connecting to lobby server…')
   const [connected, setConnected] = useState(false)
   const [pending, setPending] = useState(false)
@@ -43,7 +44,7 @@ export function useLobby() {
       const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/lobby`)
       socket.current = ws
       ws.onopen = () => {
-        if (disposed) return
+        if (disposed || socket.current !== ws) return
         attempts = 0
         setConnected(true)
         setStatus('Connected')
@@ -54,7 +55,7 @@ export function useLobby() {
         }
       }
       ws.onmessage = event => {
-        if (disposed) return
+        if (disposed || socket.current !== ws) return
         const message = JSON.parse(event.data) as ServerMessage
         if (message.type !== 'room' && message.type !== 'draft_saved') { setPending(false); clearTimeout(timeout.current) }
         if (message.type === 'joined') {
@@ -78,7 +79,7 @@ export function useLobby() {
         } else if (message.type === 'error') setNotice(message.message)
       }
       ws.onclose = () => {
-        if (disposed) return
+        if (disposed || socket.current !== ws) return
         setConnected(false)
         setPending(false)
         clearTimeout(timeout.current)
@@ -94,7 +95,22 @@ export function useLobby() {
       clearTimeout(timeout.current)
       socket.current?.close()
     }
-  }, [])
+  }, [connectionVersion])
+
+  function goHome() {
+    const previous = socket.current
+    // Invalidate the old connection before queued joined/room messages arrive.
+    socket.current = null
+    sessionRef.current = null
+    saveSession(null)
+    clearTimeout(timeout.current)
+    setSession(null); setLobby(null); setInvite(''); setNotice(''); setSavedRevision(0)
+    setPending(false); setConnected(false); setStatus('Connecting to lobby server…')
+    if (previous?.readyState === WebSocket.OPEN) previous.send(JSON.stringify({ type: 'leave' }))
+    previous?.close()
+    history.replaceState(null, '', '/home')
+    setConnectionVersion(version => version + 1)
+  }
 
   function send(type: string, extra: Record<string, unknown> = {}) {
     if (socket.current?.readyState !== WebSocket.OPEN || pending) return
@@ -112,5 +128,5 @@ export function useLobby() {
     return true
   }
   function clearInvite() { setInvite(''); updateInvite(); setNotice('') }
-  return { lobby, session, invite, connected, pending, notice, status, send, saveDraft, savedRevision, clearInvite, setNotice }
+  return { lobby, session, invite, connected, pending, notice, status, send, saveDraft, savedRevision, clearInvite, setNotice, goHome }
 }

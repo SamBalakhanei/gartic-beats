@@ -1,3 +1,4 @@
+import Brand from '../Brand'
 import Results from './Results'
 import { useEffect, useRef, useState } from 'react'
 import Studio from '../Studio'
@@ -5,13 +6,14 @@ import { MAX_PROMPT_LENGTH } from './types'
 import type { GameView, Song } from './types'
 
 type Props = {
+  onHome: () => void
   isHost: boolean; hostName: string; hostConnected: boolean
   game: GameView; connected: boolean; pending: boolean; notice: string; savedRevision: number
   send: (type: string, extra?: Record<string, unknown>) => void
   saveDraft: (extra: Record<string, unknown>) => boolean
 }
 
-export default function GameScreen({ isHost, hostName, hostConnected, game, connected, pending, notice, savedRevision, send, saveDraft }: Props) {
+export default function GameScreen({ onHome, isHost, hostName, hostConnected, game, connected, pending, notice, savedRevision, send, saveDraft }: Props) {
   const [prompt, setPrompt] = useState(game.phase === 'prompts' ? game.mine?.prompt ?? '' : '')
   const [seconds, setSeconds] = useState(600)
   const [revision, setRevision] = useState(0)
@@ -35,9 +37,9 @@ export default function GameScreen({ isHost, hostName, hostConnected, game, conn
 
   if (game.phase === 'music' && mine) {
     const locked = disabled || mine.submitted || seconds === 0
-    return <Studio active hasLobby game={{
+    return <Studio onHome={onHome} active hasLobby game={{
       initialSong: mine.song, prompt: mine.prompt ?? '', disabled: locked,
-      toolbar: <div className="round-toolbar"><div><strong>{mine.submitted ? 'Song submitted. Waiting for the others…' : 'One prompt. One song. Make it yours.'}</strong><p>{progress}</p></div><button className="secondary-button" disabled={disabled} onClick={() => send('leave')}>Leave game</button><span className="round-clock" aria-label="Time remaining">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>{connectionNote && <p role="status">{connectionNote}</p>}{notice && <p role="status">{notice}</p>}</div>,
+      toolbar: <div className="round-toolbar"><div><strong>{mine.submitted ? 'Song submitted. Waiting for the others…' : 'One prompt. One song. Make it yours.'}</strong><p>{progress}</p></div><span className="round-clock" aria-label="Time remaining">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>{connectionNote && <p role="status">{connectionNote}</p>}{notice && <p role="status">{notice}</p>}</div>,
       saveStatus: mine.submitted ? 'Submitted — your song is locked in.' : !connected ? 'Offline — editing paused until you reconnect.' : seconds === 0 ? 'Time is up. Opening results…' : revision > savedRevision ? 'Saving…' : 'All changes saved.',
       onSongChange: (song: Song) => {
         const next = ++revisionRef.current
@@ -50,7 +52,7 @@ export default function GameScreen({ isHost, hostName, hostConnected, game, conn
   }
 
   return <main className="app home-app">
-    <header className="brand-row"><span className="brand">beat<span>telephone</span><span className="brand-dot">.</span></span><button className="secondary-button" disabled={disabled} onClick={() => send('leave')}>Leave game</button></header>
+    <header className="brand-row"><Brand onHome={onHome} /></header>
     <section className="home-intro"><p className="eyebrow">{game.phase === 'results' ? 'The listening party' : 'It starts with an idea'}</p><h1 ref={heading} tabIndex={-1}>{game.phase === 'results' ? 'Hear what happened.' : 'Write something worth a beat.'}</h1><p>{game.phase === 'results' ? 'One song at a time. The host leads the listening party.' : 'Give someone a scene, a mood, or something ridiculous. Your prompt will go to another player.'}</p></section>
     {game.phase === 'results' ? <Results game={game} isHost={isHost} hostName={hostName} hostConnected={hostConnected} connected={connected} pending={pending} send={send} /> : mine ? <section className="home-card">
       {mine.promptSubmitted ? <><h2>Prompt submitted!</h2><p>Waiting for everyone to finish writing. Your 10 minutes starts when all prompts are ready.</p></> : <form className="prompt-form" onSubmit={event => { event.preventDefault(); send('prompt', { gameId: game.id, prompt }) }}>

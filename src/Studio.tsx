@@ -1,3 +1,4 @@
+import Brand from './Brand'
 import PianoEditor from './music/PianoEditor'
 import { emptyPiano } from './music/piano'
 import type { PianoTrack } from './music/piano'
@@ -23,7 +24,7 @@ const presets: { id: Preset; label: string }[] = [
   { id: 'soul', label: 'Soul Chop' }, { id: 'stadium', label: 'Stadium Glow' }, { id: 'industrial', label: 'Industrial Stomp' },
 ]
 
-export default function Studio({ active, hasLobby, game }: { active: boolean; hasLobby: boolean; game?: GameStudio }) {
+export default function Studio({ active, hasLobby, game, onHome }: { onHome: () => void; active: boolean; hasLobby: boolean; game?: GameStudio }) {
   const titleId = useId()
   const [song, setSong] = useState<Arrangement>(() => {
     const initial = game?.initialSong ?? { pattern: createPreset('soul'), bpm: DEFAULT_BPM }
@@ -97,9 +98,12 @@ export default function Studio({ active, hasLobby, game }: { active: boolean; ha
   const barIsEmpty = instruments.every(({ id }) => !song.pattern[id].slice(bar * STEPS_PER_BAR, (bar + 1) * STEPS_PER_BAR).some(Boolean))
 
   return <main className="app studio-app">
-    <header className="brand-row"><a className="brand" href="#home">beat<span>telephone</span><span className="brand-dot">.</span></a>{game ? <span className="badge">Song round</span> : <a className="secondary-button" href="#home">← Back to {hasLobby ? 'lobby' : 'home'}</a>}</header>
+    <header className="brand-row"><Brand onHome={onHome} />{game ? <span className="badge">Song round</span> : <a className="secondary-button" href="#home">← Back to {hasLobby ? 'lobby' : 'home'}</a>}</header>
     {game?.toolbar}
-    <section className="studio-brief" aria-labelledby={titleId}><div><p className="eyebrow">The studio</p><h1 ref={titleRef} id={titleId} tabIndex={-1}>Make it sound like you.</h1></div><p className="studio-prompt">“{game?.prompt ?? 'A raccoon breaking into a nightclub'}”</p></section>
+    {game ? <section className="game-studio-prompt" aria-labelledby={titleId}>
+      <p className="eyebrow">Your prompt</p>
+      <h1 ref={titleRef} id={titleId} tabIndex={-1}>{game.prompt}</h1>
+    </section> : <h1 ref={titleRef} id={titleId} className="sr-only" tabIndex={-1}>Sandbox studio</h1>}
     <div className="studio-transport">
       <button className={`play-button ${playing ? 'is-playing' : ''}`} disabled={!!game?.disabled || recording || starting} onClick={() => playing ? machine.current?.stop() : void play()}>{starting ? 'Starting…' : playing ? '■ Stop' : '▶ Play song'}</button>
       <fieldset disabled={locked} className="transport-tempo"><NumberControl label="Beat BPM" value={song.bpm} min={MIN_BPM} max={MAX_BPM} onChange={bpm => apply({ ...songRef.current, bpm }, 'Beat tempo updated. Vocal BPMs stay independent.')} /><span>4 bars · {Number((TOTAL_STEPS * stepSeconds(song.bpm)).toFixed(1))}s</span></fieldset>

@@ -28,7 +28,7 @@ async function setup(t, grace = 150, musicDuration) {
       socket,
       send: message => socket.send(JSON.stringify(message)),
       next: (type, predicate = () => true) => new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { listeners.delete(check); reject(new Error(`Missing ${type}`)) }, 2000)
+        const timer = setTimeout(() => { listeners.delete(check); reject(new Error(`Missing ${type}`)) }, 6000)
         function check() {
           const index = queue.findIndex(message => message.type === type && predicate(message))
           if (index >= 0) { clearTimeout(timer); listeners.delete(check); resolve(queue.splice(index, 1)[0]) }

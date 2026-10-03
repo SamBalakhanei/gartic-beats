@@ -1,8 +1,9 @@
 import { withVoice } from './test-voice.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { controlReveal, createGame, submitPrompt, saveSong, gameView, validateSong, finishIfReady, departGame } from './game.ts'
+import { controlReveal, createGame as createGameWithGrace, submitPrompt, saveSong, gameView, validateSong, finishIfReady, departGame } from './game.ts'
 import { emptyPattern } from '../src/music/pattern.ts'
+const createGame = players => createGameWithGrace(players, 0)
 
 test('random assignment never gives a player their own prompt and uses every prompt exactly once', () => {
   const assignments = new Set()
@@ -195,4 +196,20 @@ test('reveal history grows without leaking future entries and survives backward 
   assert.equal(view.results[0].contribution, 1)
   assert.equal(view.results[0].song.pattern.kick[1], true)
   assert.equal(view.results[0].song.pattern.kick[2], false)
+})
+
+
+test('timer submission arrives during grace without any saved draft; stale rounds still fail', () => {
+  const game = createGameWithGrace([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }])
+  submitPrompt(game, 'a', 'First', 0); submitPrompt(game, 'b', 'Second', 0)
+  const song = { pattern: emptyPattern(), bpm: 100 }
+  song.pattern.kick[3] = true
+  finishIfReady(game, 600000)
+  assert.equal(game.phase, 'music')
+  saveSong(game, 'a', song, true, 600100, false, 1, true)
+  assert.equal(game.players[0].automatic, true)
+  finishIfReady(game, 603000)
+  assert.equal(game.phase, 'results')
+  assert.deepEqual(game.players[1].contributions[0].song, song)
+  assert.throws(() => saveSong(game, 'b', song, true, 603001, false, 1), /ended/)
 })

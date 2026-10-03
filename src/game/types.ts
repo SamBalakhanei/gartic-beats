@@ -3,6 +3,7 @@ import type { Mix, VocalClip } from '../music/arrangement.ts'
 import type { VoiceTrack } from '../music/voice.ts'
 import type { Pattern } from '../music/pattern.ts'
 export const MUSIC_DURATION_MS = 10 * 60 * 1000
+export const SUBMISSION_GRACE_MS = 3000
 export const MAX_PROMPT_LENGTH = 240
 // layers holds earlier sections in chronological order; each section is four bars.
 export type Song = { pattern: Pattern; bpm: number; voice?: VoiceTrack; mix?: Mix; vocals?: VocalClip[]; piano?: PianoTrack; layers?: Song[] }

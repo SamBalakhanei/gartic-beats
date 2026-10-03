@@ -1,3 +1,4 @@
+import { SUBMISSION_GRACE_MS } from '../src/game/types.ts'
 import { DurableObject } from 'cloudflare:workers'
 import { createGame, controlReveal, departGame, finishIfReady, gameView, saveSong, submitPrompt } from '../server/game.ts'
 import type { Game } from '../server/game.ts'
@@ -75,7 +76,7 @@ export class Room extends DurableObject<Env> {
     if (this.room) {
       deadlines.push(this.room.expires)
       for (const p of this.room.players) if (p.expires) deadlines.push(p.expires)
-      if (this.room.game?.phase === 'music') deadlines.push(this.room.game.deadline!)
+      if (this.room.game?.phase === 'music') deadlines.push(this.room.game.deadline! + (this.room.game.submissionGrace ?? SUBMISSION_GRACE_MS))
     }
     if (deadlines.length) await this.ctx.storage.setAlarm(Math.max(Date.now() + 1, Math.min(...deadlines)))
     else await this.ctx.storage.deleteAlarm()
@@ -176,7 +177,7 @@ export class Room extends DurableObject<Env> {
       } else if (['prompt', 'draft', 'submit_song'].includes(String(m.type))) {
         if (!room.game || m.gameId !== room.game.id) throw new Error('Wrong game.')
         if (m.type === 'prompt') submitPrompt(room.game, a.playerId, m.prompt, Date.now())
-        else saveSong(room.game, a.playerId, m.song, m.type === 'submit_song', Date.now(), true, Number(m.round))
+        else saveSong(room.game, a.playerId, m.song, m.type === 'submit_song', Date.now(), true, Number(m.round), m.automatic === true)
       } else throw new Error('Unknown request.')
       await this.persist()
       if (m.type === 'draft') this.send(ws, { type: 'draft_saved', revision: Number.isSafeInteger(m.revision) ? m.revision : 0 })

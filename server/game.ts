@@ -4,18 +4,18 @@ import { validateVoice, validateVoiceReference } from '../src/music/voice.ts'
 import { randomInt, randomUUID } from 'node:crypto'
 import { emptyPattern, instruments, TOTAL_STEPS } from '../src/music/pattern.ts'
 import { DEFAULT_BPM, MIN_BPM, MAX_BPM } from '../src/music/tempo.ts'
-import { MAX_PROMPT_LENGTH, MUSIC_DURATION_MS } from '../src/game/types.ts'
+import { MAX_PROMPT_LENGTH, MUSIC_DURATION_MS, SUBMISSION_GRACE_MS } from '../src/game/types.ts'
 import type { GameView, Song, Reveal } from '../src/game/types.ts'
 
 type Contribution = { playerId: string; name: string; song: Song; automatic: boolean }
 type Participant = { id: string; name: string; prompt: string | null; owner: string | null; song: Song; submitted: boolean; automatic: boolean; absent: boolean; contributions: Contribution[] }
-export type Game = { revealed?: number; reveal: Reveal; id: string; phase: GameView['phase']; deadline: number | null; players: Participant[]; order: string[]; round: number; duration: number }
+export type Game = { submissionGrace?: number; revealed?: number; reveal: Reveal; id: string; phase: GameView['phase']; deadline: number | null; players: Participant[]; order: string[]; round: number; duration: number }
 const freshSong = (bpm = DEFAULT_BPM): Song => ({ pattern: emptyPattern(), bpm })
 const ownPart = ({ layers: _layers, ...song }: Song): Song => song
 
-export function createGame(players: { id: string; name: string }[]): Game {
+export function createGame(players: { id: string; name: string }[], submissionGrace = SUBMISSION_GRACE_MS): Game {
   if (players.length < 2 || players.length > 8) throw new Error('Two to eight connected players are needed.')
-  return { reveal: { index: 0, playing: false, revision: 0 }, id: randomUUID(), phase: 'prompts', deadline: null, order: [], round: 0, duration: MUSIC_DURATION_MS, players: players.map(player => ({ ...player, prompt: null, owner: null, song: freshSong(), submitted: false, automatic: false, absent: false, contributions: [] })) }
+  return { submissionGrace, reveal: { index: 0, playing: false, revision: 0 }, id: randomUUID(), phase: 'prompts', deadline: null, order: [], round: 0, duration: MUSIC_DURATION_MS, players: players.map(player => ({ ...player, prompt: null, owner: null, song: freshSong(), submitted: false, automatic: false, absent: false, contributions: [] })) }
 }
 
 function beginRound(game: Game, now: number) {
@@ -45,7 +45,7 @@ export function assignPrompts(game: Game, now: number, duration = MUSIC_DURATION
 }
 
 export function finishIfReady(game: Game, now: number) {
-  while (game.phase === 'music' && (now >= game.deadline! || game.players.every(p => p.submitted))) {
+  while (game.phase === 'music' && (now >= game.deadline! + (game.submissionGrace ?? SUBMISSION_GRACE_MS) || game.players.every(p => p.submitted))) {
     for (const player of game.players) {
       if (!player.submitted) { player.submitted = true; player.automatic = true }
       const owner = game.players.find(p => p.id === player.owner)!
@@ -90,7 +90,7 @@ export function validateSong(value: unknown, referencesOnly = false): Song {
   return { bpm, pattern: clean, ...(piano !== undefined ? { piano: validatePiano(piano) } : {}), ...(mix ? { mix: { beat: mix.beat, voice: mix.voice } } : {}), ...(validatedVocals ? { vocals: validatedVocals } : {}), ...(voice && !validatedVocals ? { voice: voiceValidator(voice) } : {}) }
 }
 
-export function saveSong(game: Game, id: string, value: unknown, submit: boolean, now: number, referencesOnly = false, round = game.round) {
+export function saveSong(game: Game, id: string, value: unknown, submit: boolean, now: number, referencesOnly = false, round = game.round, automatic = false) {
   finishIfReady(game, now)
   const player = game.players.find(item => item.id === id)
   if (game.phase !== 'music' || round !== game.round || !player || player.submitted) throw new Error('This music turn has already ended.')
@@ -99,7 +99,7 @@ export function saveSong(game: Game, id: string, value: unknown, submit: boolean
   const layers = game.players.find(p => p.id === player.owner)!.contributions.map(p => p.song)
   if (layers?.length && song.bpm !== layers[0].bpm) throw new Error('Keep the tempo of the existing song.')
   player.song = song
-  if (submit) player.submitted = true
+  if (submit) { player.submitted = true; player.automatic = automatic }
   finishIfReady(game, now)
 }
 

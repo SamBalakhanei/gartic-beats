@@ -8,7 +8,7 @@ import { useLobby } from './lobby/useLobby'
 export default function App() {
   const [sandbox, setSandbox] = useState(window.location.hash === '#sandbox')
   const [visitedStudio, setVisitedStudio] = useState(sandbox)
-  const { lobby, session, invite, connected, pending, notice, status, send, saveDraft, savedRevision, clearInvite, setNotice, goHome } = useLobby()
+  const { lobby, session, invite, connected, pending, notice, status, send, updateSong, shareRecording, submitCurrent, clearInvite, setNotice, goHome } = useLobby()
   const [guestName, setGuestName] = useState('')
   const [motionPaused, setMotionPaused] = useState(false)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -41,7 +41,7 @@ export default function App() {
 
   return (
     <>
-      {lobby?.game && <GameScreen onHome={home} isHost={!!isHost} hostName={lobby.players.find(player => player.id === lobby.hostId)?.name ?? 'Host'} hostConnected={!!lobby.players.find(player => player.id === lobby.hostId)?.connected} key={lobby.game.id} game={lobby.game} connected={connected} pending={pending} notice={notice} savedRevision={savedRevision} send={send} saveDraft={saveDraft} />}
+      {lobby?.game && <GameScreen onHome={home} isHost={!!isHost} hostName={lobby.players.find(player => player.id === lobby.hostId)?.name ?? 'Host'} hostConnected={!!lobby.players.find(player => player.id === lobby.hostId)?.connected} key={lobby.game.id} game={lobby.game} connected={connected} pending={pending} notice={notice} send={send} updateSong={updateSong} shareRecording={shareRecording} submitCurrent={submitCurrent} />}
       <main className={`app landing-page ${lobby ? 'has-room' : ''} ${motionPaused ? 'motion-paused' : ''}`} hidden={sandbox || !!lobby?.game}>
         <div className="landing-atmosphere" aria-hidden="true"><div className="ambient-glow glow-lime" /><div className="ambient-glow glow-purple" /><div className="ambient-rings"><i /><i /><i /></div></div>
         <header className="brand-row">

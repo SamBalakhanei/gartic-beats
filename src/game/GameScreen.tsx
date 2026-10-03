@@ -3,23 +3,22 @@ import Results from './Results'
 import { useEffect, useRef, useState } from 'react'
 import Studio from '../Studio'
 import { MAX_PROMPT_LENGTH } from './types'
+import type { VoiceTrack } from '../music/voice'
 import type { GameView, Song } from './types'
 
 type Props = {
   onHome: () => void
   isHost: boolean; hostName: string; hostConnected: boolean
-  game: GameView; connected: boolean; pending: boolean; notice: string; savedRevision: number
+  game: GameView; connected: boolean; pending: boolean; notice: string
   send: (type: string, extra?: Record<string, unknown>) => void
-  saveDraft: (extra: Record<string, unknown>) => boolean
+  updateSong: (extra: Record<string, unknown>) => void
+  shareRecording: (voice: VoiceTrack) => void
+  submitCurrent: () => void
 }
 
-export default function GameScreen({ onHome, isHost, hostName, hostConnected, game, connected, pending, notice, savedRevision, send, saveDraft }: Props) {
+export default function GameScreen({ onHome, isHost, hostName, hostConnected, game, connected, pending, notice, send, updateSong, shareRecording, submitCurrent }: Props) {
   const [prompt, setPrompt] = useState(game.phase === 'prompts' ? game.mine?.prompt ?? '' : '')
   const [seconds, setSeconds] = useState(600)
-  const [revision, setRevision] = useState(0)
-  const revisionRef = useRef(savedRevision)
-  const draftTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  useEffect(() => () => clearTimeout(draftTimer.current), [game.phase, game.round])
   const localDeadline = useRef<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   useEffect(() => { heading.current?.focus() }, [game.phase, game.round])
@@ -30,6 +29,9 @@ export default function GameScreen({ onHome, isHost, hostName, hostConnected, ga
     const timer = setInterval(update, 250)
     return () => clearInterval(timer)
   }, [game.deadline, game.serverNow])
+  useEffect(() => {
+    if (game.phase === 'music' && seconds === 0 && game.deadline !== null && Date.now() >= (localDeadline.current ?? Infinity)) submitCurrent()
+  }, [seconds, game.phase, game.round, game.deadline, connected, submitCurrent])
   const mine = game.mine
   const disabled = !connected || pending
   const progress = `${game.completed} / ${game.total} ${game.phase === 'prompts' ? 'prompts' : 'parts'} submitted`
@@ -42,14 +44,10 @@ export default function GameScreen({ onHome, isHost, hostName, hostConnected, ga
     return <Studio key={`${game.id}:${game.round}`} onHome={onHome} active hasLobby game={{
       initialSong: mine.song, prompt: mine.prompt, disabled: locked,
       toolbar: <div className="round-toolbar"><div><strong>{mine.submitted ? 'Part submitted. Waiting for the others…' : `Round ${game.round} of ${game.rounds} · Add your part, then pass it on.`}</strong><p>{progress}</p></div><span className="round-clock" aria-label="Time remaining">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>{connectionNote && <p role="status">{connectionNote}</p>}{notice && <p role="status">{notice}</p>}</div>,
-      saveStatus: mine.submitted ? 'Submitted — your part is locked in.' : !connected ? 'Offline — editing paused until you reconnect.' : seconds === 0 ? 'Time is up. Passing the song on…' : revision > savedRevision ? 'Saving…' : 'Arrangement saved · Keep this tab open while audio is shared.',
-      onSongChange: (song: Song) => {
-        const next = ++revisionRef.current
-        setRevision(next)
-        clearTimeout(draftTimer.current)
-        draftTimer.current = setTimeout(() => saveDraft({ gameId: game.id, round: game.round, song, revision: next }), 200)
-      },
-      onSubmit: song => { clearTimeout(draftTimer.current); send('submit_song', { gameId: game.id, round: game.round, song }) },
+      submissionStatus: mine.submitted ? 'Submitted — your part is locked in.' : !connected ? 'Offline — editing paused until you reconnect.' : pending ? 'Submitting your part… Keep this tab open.' : seconds === 0 ? 'Time is up. Passing the song on…' : 'Not submitted yet · Submit when your part is ready.',
+      onRecording: shareRecording,
+      onSongChange: (song: Song) => updateSong({ gameId: game.id, round: game.round, song }),
+      onSubmit: song => { updateSong({ gameId: game.id, round: game.round, song }); send('submit_song', { gameId: game.id, round: game.round, song }) },
     }} />
   }
 

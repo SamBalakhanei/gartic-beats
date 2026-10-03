@@ -70,3 +70,22 @@ test('peer transport chunks lossless recordings, waits for receipts, and restore
     assert.ok(ICE_SERVERS.every(server => [server.urls].flat().every(url => url.startsWith('stun:'))))
   } finally { for (const peer of managers.values()) peer.close(); a.close(); globalThis.RTCPeerConnection = previous; pcs.clear() }
 })
+
+test('exit snapshots synchronously preserve prepared audio and latest edits without draft traffic', async () => {
+  const messages = []
+  const manager = new Peers(message => messages.push(message), () => {}, () => {})
+  try {
+    const song = withVoice({ pattern: emptyPattern(), bpm: 120 })
+    assert.equal(manager.snapshot(song).voice, undefined, 'unprepared audio cannot be hashed during page exit')
+    const wire = await manager.prepare(song)
+    const edited = { ...song, mix: { beat: .2, voice: .8 }, layers: [song] }
+    edited.pattern.kick[5] = true
+    const snapshot = manager.snapshot(edited)
+    assert.equal(snapshot.voice.data, wire.voice.data)
+    assert.equal(snapshot.pattern.kick[5], true)
+    assert.deepEqual(snapshot.mix, edited.mix)
+    assert.equal(snapshot.layers, undefined)
+    assert.deepEqual(messages, [], 'editing/preparing never sends a coordinator draft')
+    assert.deepEqual(manager.hydrate(snapshot).voice, song.voice)
+  } finally { manager.close() }
+})

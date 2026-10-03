@@ -2,7 +2,7 @@ import { MAX_VOICE_BYTES } from '../src/music/voice.ts'
 import { MAX_VOCAL_LAYERS } from '../src/music/arrangement.ts'
 import { controlReveal, createGame, departGame, finishIfReady, gameView, saveSong, submitPrompt } from './game.ts'
 import type { Game } from './game.ts'
-import { MUSIC_DURATION_MS } from '../src/game/types.ts'
+import { MUSIC_DURATION_MS, SUBMISSION_GRACE_MS } from '../src/game/types.ts'
 import { randomBytes, randomUUID } from 'node:crypto'
 import type { IncomingMessage } from 'node:http'
 import type { EventEmitter } from 'node:events'
@@ -42,7 +42,7 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000, musicD
         room.gameTimer = undefined
         syncGame(room)
         broadcast(room)
-      }, Math.max(1, room.game.deadline! - Date.now()))
+      }, Math.max(1, room.game.deadline! + (room.game.submissionGrace ?? SUBMISSION_GRACE_MS) - Date.now()))
       room.gameTimer.unref()
     } else if (room.game.phase === 'results') { clearTimeout(room.gameTimer); room.gameTimer = undefined }
   }
@@ -148,7 +148,7 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000, musicD
         try {
           if (message.gameId !== game.id) throw new Error('This request belongs to a different game.')
           if (message.type === 'prompt') submitPrompt(game, current.player.id, message.prompt, Date.now(), musicDuration)
-          else saveSong(game, current.player.id, message.song, message.type === 'submit_song', Date.now(), false, Number(message.round))
+          else saveSong(game, current.player.id, message.song, message.type === 'submit_song', Date.now(), false, Number(message.round), message.automatic === true)
           syncGame(current.room)
           if (message.type === 'draft') {
             send(socket, { type: 'draft_saved', revision: typeof message.revision === 'number' ? message.revision : 0 })

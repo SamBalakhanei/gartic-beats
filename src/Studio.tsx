@@ -17,7 +17,8 @@ import type { VocalClip, Mix } from './music/arrangement'
 
 type Arrangement = Song & { piano: PianoTrack; mix: Mix; vocals: VocalClip[] }
 type GameStudio = {
-  initialSong: Song; prompt: string | null; disabled: boolean; toolbar: ReactNode; saveStatus: string
+  initialSong: Song; prompt: string | null; disabled: boolean; toolbar: ReactNode; submissionStatus: string
+  onRecording: (voice: VoiceTrack) => void
   onSongChange: (song: Song) => void; onSubmit: (song: Song) => void
 }
 const presets: { id: Preset; label: string }[] = [
@@ -92,6 +93,7 @@ export default function Studio({ active, hasLobby, game, onHome }: { onHome: () 
     apply({ ...songRef.current, vocals: songRef.current.vocals.map(clip => clip.id === id ? { ...clip, ...patch } : clip) }, 'Vocal layer updated.')
   }
   function recordTake(voice: VoiceTrack) {
+    game?.onRecording(voice)
     const current = songRef.current
     const replacement = current.vocals.find(clip => clip.id === recordTarget)
     const id = replacement?.id ?? crypto.randomUUID()
@@ -132,7 +134,7 @@ export default function Studio({ active, hasLobby, game, onHome }: { onHome: () 
       <fieldset disabled={locked || backing.length > 0} className="transport-tempo"><NumberControl label="Beat BPM" value={song.bpm} min={MIN_BPM} max={MAX_BPM} onChange={bpm => apply({ ...songRef.current, bpm }, 'Beat tempo updated. Vocal BPMs stay independent.')} /><span>4 bars · {Number((TOTAL_STEPS * stepSeconds(song.bpm)).toFixed(1))}s</span></fieldset>
       <VoiceRecorder bpm={song.bpm} targetName={targetClip?.name} disabled={inspecting || !!game?.disabled || !active || starting || (!targetClip && song.vocals.length >= MAX_VOCAL_LAYERS)} onBusy={setRecording} onTake={recordTake} prepareBeat={async () => { await machine.current?.prepare() }} startBeat={async () => { playSection.current = backing.length; return machine.current?.start(songRef.current, backing.length) }} stopBeat={() => machine.current?.stop()} />
       <label className="record-destination">Record into<select value={targetClip ? recordTarget : 'new'} disabled={locked} onChange={event => setRecordTarget(event.target.value)}><option value="new">New vocal layer</option>{song.vocals.map(clip => <option value={clip.id} key={clip.id}>Replace {clip.name}</option>)}</select></label>
-      {game && <div className="transport-submit"><button className="secondary-button" disabled={busy} onClick={() => game.onSubmit(songRef.current)}>Submit part</button><span role="status">{game.saveStatus}</span></div>}
+      {game && <div className="transport-submit"><button className="secondary-button" disabled={busy} onClick={() => game.onSubmit(songRef.current)}>Submit part</button><span role="status">{game.submissionStatus}</span></div>}
     </div>
     <div className="studio-tabs" role="group" aria-label="Choose instrument editor">
       {(['piano', 'drums', 'vocals'] as const).map(tab => <button key={tab} aria-pressed={panel === tab} onClick={() => setPanel(tab)}>{tab === 'piano' ? '♫ Piano' : tab === 'drums' ? '▦ Drums' : '● Vocals'}<small>{tab === 'piano' ? `${song.piano.notes.length} notes` : tab === 'drums' ? `${notes} hits` : `${song.vocals.length} layers`}</small></button>)}

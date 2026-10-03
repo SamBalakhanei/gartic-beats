@@ -142,11 +142,23 @@ export class Peers {
     this.prepared.set(song, promise)
     return promise
   }
+  // Synchronous best-effort manifest for pagehide: crypto cannot be awaited there.
+  snapshot(song: Song): Song {
+    const { layers: _history, voice, vocals, ...part } = song
+    const reference = (track: VoiceTrack) => {
+      const data = isReference(track.data) ? track.data : this.hashes.get(track.data)
+      return data ? { ...track, data } : undefined
+    }
+    return { ...part,
+      ...(vocals ? { vocals: vocals.flatMap(clip => { const voice = reference(clip.voice); return voice ? [{ ...clip, voice }] : [] }) } : {}),
+      ...(voice && reference(voice) ? { voice: reference(voice) } : {}),
+    }
+  }
   async shared(song: Song) {
     const files = tracks(song).map(t => t.data)
     const start = Date.now()
     while (this.members.some(id => { const p = this.peers.get(id); return !p || files.some(hash => !p.receipts.has(hash)) })) {
-      if (this.closed || Date.now() - start > 30_000) throw new Error('Song is saved locally, but sharing is incomplete. Keep this tab open, check connections, then submit again.')
+      if (this.closed || Date.now() - start > 30_000) throw new Error('Your song is still in this tab, but sharing is incomplete. Keep this tab open, check connections, then submit again.')
       await new Promise(resolve => setTimeout(resolve, 100))
     }
   }

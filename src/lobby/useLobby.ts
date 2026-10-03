@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { emptyPattern } from '../music/pattern'
+import type { VoiceTrack } from '../music/voice'
 import { Peers } from '../p2p/Peers'
 import type { Song } from '../game/types'
 import type { Lobby, ServerMessage, Session } from './lobby'
@@ -40,7 +42,24 @@ export function useLobby() {
   const [connected, setConnected] = useState(true)
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState('')
-  const [savedRevision, setSavedRevision] = useState(0)
+  const currentSong = useRef<{ gameId: unknown; round: unknown; song: Song } | null>(null)
+  const automaticTurn = useRef('')
+  const flush = useRef<() => void>(() => {})
+  flush.current = () => {
+    const draft = currentSong.current, game = rawRoom.current?.game, ws = socket.current, manager = peers.current
+    if (!draft || !manager || ws?.readyState !== WebSocket.OPEN || game?.phase !== 'music' || game.mine?.submitted || draft.gameId !== game.id || draft.round !== game.round) return
+    const turn = `${game.id}:${game.round}`
+    if (automaticTurn.current === turn) return
+    try {
+      ws.send(JSON.stringify({ type: 'submit_song', gameId: game.id, round: game.round, song: manager.snapshot(draft.song), automatic: true }))
+      automaticTurn.current = turn
+    } catch { /* Leaving a page is best effort; the server still advances on timeout. */ }
+  }
+  useEffect(() => {
+    const leavePage = () => flush.current()
+    window.addEventListener('pagehide', leavePage)
+    return () => window.removeEventListener('pagehide', leavePage)
+  }, [])
   const [invite, setInvite] = useState(new URLSearchParams(location.search).get('room') ?? '')
 
   function refreshRoom() {
@@ -102,8 +121,7 @@ export function useLobby() {
           rawRoom.current = message.room
           if (sessionRef.current) manager.sync(message.room, sessionRef.current.playerId)
           refreshRoom()
-        } else if (message.type === 'draft_saved') setSavedRevision(previous => Math.max(previous, message.revision))
-        else if (message.type === 'notice') setNotice(message.message)
+        } else if (message.type === 'notice') setNotice(message.message)
         else if (message.type === 'left' || message.type === 'error' && ['session_expired', 'session_in_use'].includes(message.code)) {
           sessionRef.current = null; opening.current = null
           saveSession(null)
@@ -138,6 +156,8 @@ export function useLobby() {
   }, [connectionVersion])
 
   function goHome() {
+    flush.current()
+    currentSong.current = null
     const previous = socket.current
     // Invalidate the old connection before queued joined/room messages arrive.
     socket.current = null
@@ -145,7 +165,7 @@ export function useLobby() {
     rawRoom.current = null; opening.current = null; sending.current = false; transferQueue.current = Promise.resolve()
     saveSession(null)
     clearTimeout(timeout.current)
-    setSession(null); setLobby(null); setInvite(''); setNotice(''); setSavedRevision(0)
+    setSession(null); setLobby(null); setInvite(''); setNotice('')
     setPending(false); setConnected(false); setStatus('Connecting to lobby server…')
     if (previous?.readyState === WebSocket.OPEN) previous.send(JSON.stringify({ type: 'leave' }))
     previous?.close()
@@ -173,8 +193,6 @@ export function useLobby() {
         setNotice('Sharing your recordings with the other players… Keep this tab open.')
         const { layers: _backing, ...part } = extra.song as Song
         const song = await manager.prepare(part)
-        // Save metadata before waiting, so timeout results retain the latest arrangement.
-        if (socket.current === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'draft', ...extra, song }))
         await manager.shared(song)
         payload = { ...extra, song }
       }
@@ -183,16 +201,17 @@ export function useLobby() {
       timeout.current = setTimeout(() => { setNotice('The server did not respond. Reconnecting…'); ws.close() }, 8000)
     }).catch(error => { if (socket.current !== ws) return; sending.current = false; setPending(false); setNotice(error instanceof Error ? error.message : 'Unable to share song.') })
   }
-  function saveDraft(extra: Record<string, unknown>) {
-    const ws = socket.current, manager = peers.current
-    if (ws?.readyState !== WebSocket.OPEN || !manager || sending.current) return false
-    transferQueue.current = transferQueue.current.catch(() => {}).then(async () => {
-      const { layers: _backing, ...part } = extra.song as Song
-      const song = await manager.prepare(part)
-      if (socket.current === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'draft', ...extra, song }))
-    }).catch(error => { if (socket.current === ws) setNotice(error instanceof Error ? error.message : 'Draft could not be saved.') })
-    return true
+  function updateSong(extra: Record<string, unknown>) {
+    // A live reference for final submission only. No persistence or network work.
+    currentSong.current = { gameId: extra.gameId, round: extra.round, song: extra.song as Song }
   }
+  function shareRecording(voice: VoiceTrack) {
+    const manager = peers.current
+    if (manager) void manager.prepare({ pattern: emptyPattern(), bpm: voice.bpm, voice }).catch(error => {
+      if (peers.current === manager) setNotice(error instanceof Error ? error.message : 'Recording could not be shared.')
+    })
+  }
+  function submitCurrent() { flush.current() }
   function clearInvite() { setInvite(''); updateInvite(); setNotice('') }
-  return { lobby, session, invite, connected, pending, notice, status, send, saveDraft, savedRevision, clearInvite, setNotice, goHome }
+  return { lobby, session, invite, connected, pending, notice, status, send, updateSong, shareRecording, submitCurrent, clearInvite, setNotice, goHome }
 }

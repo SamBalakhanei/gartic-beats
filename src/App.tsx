@@ -59,13 +59,13 @@ export default function App() {
               <ul className="player-list" aria-label="Lobby players">
                 {lobby.players.map((player, index) => <li key={player.id}>
                   <span className="player-avatar" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-                  <span className="player-name">{player.name}{player.id === session?.playerId ? ' (you)' : ''}<small className="player-connection">{player.connected && connected ? 'Connected' : 'Reconnecting…'}</small></span>
+                  <span className="player-name">{player.name}{player.id === session?.playerId ? ' (you)' : ''}<small className="player-connection">{player.connected && connected ? player.peerReady ? 'Audio connection ready' : 'Checking direct audio connection…' : 'Reconnecting…'}</small></span>
                   {player.id === lobby.hostId && <span className="host-label">Host</span>}
                 </li>)}
               </ul>
               {isHost && <button className="play-button home-primary" onClick={() => send('start')} disabled={!connected || pending || !canStart(lobby)} aria-describedby="start-help">Start game</button>}
-              <p id="start-help" className="card-note">{!isHost ? 'Waiting for the host to start.' : canStart(lobby) ? 'Ready to start writing prompts.' : 'At least 2 connected players are needed to start.'}</p>
-              <p className="local-note">Local server · Open the invite in another browser tab to join.</p>
+              <p id="start-help" className="card-note">{!isHost ? 'Waiting for the host to start.' : canStart(lobby) ? 'Ready to start writing prompts.' : 'Need 2 players and working direct audio connections. If checking never completes, try another network or rejoin.'}</p>
+              <p className="local-note">No cloud audio storage · Keep your tab open through the reveal. Direct connections may not work on every network.</p>
               <button className="text-button" disabled={!connected || pending} onClick={() => send('leave')}>Leave lobby</button>
             </> : <>
               <p>{invite ? 'You’re invited! Enter your name to join the lobby.' : 'Create a lobby and share its link with your friends.'}</p>
@@ -90,7 +90,7 @@ export default function App() {
             <p className="card-note">No lobby needed. Your beat stays when you come back.</p>
           </section>
         </div>
-        <footer className="page-footer"><p role="status">{notice}</p><p>Rooms last until the server restarts · Beats reset on refresh</p></footer>
+        <footer className="page-footer"><p role="status">{notice}</p><p>Rooms expire after 2 hours · No paid relay or cloud audio backup</p></footer>
       </main>
       {visitedStudio && <div hidden={!sandbox || !!lobby?.game}><Studio onHome={home} active={sandbox && !lobby?.game} hasLobby={lobby !== null} /></div>}
     </>

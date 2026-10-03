@@ -33,14 +33,16 @@ export default function GameScreen({ onHome, isHost, hostName, hostConnected, ga
   const mine = game.mine
   const disabled = !connected || pending
   const progress = `${game.completed} / ${game.total} ${game.phase === 'prompts' ? 'prompts' : 'songs'} submitted`
-  const connectionNote = connected ? '' : 'Connection lost. Reconnecting… Your saved draft is safe on the server.'
+  const connectionNote = connected ? '' : 'Connection lost. Reconnecting… Keep this tab open to preserve your recordings.'
+
+  if (game.phase === 'music' && game.audioPending) return <main className="app home-app"><Brand onHome={onHome} /><h1>Recovering your recordings…</h1><p role="status">Waiting for another player’s copy. Keep the other tabs open. If no connected player has a copy, these recordings cannot be recovered.</p><p>{notice}</p></main>
 
   if (game.phase === 'music' && mine) {
     const locked = disabled || mine.submitted || seconds === 0
     return <Studio onHome={onHome} active hasLobby game={{
       initialSong: mine.song, prompt: mine.prompt ?? '', disabled: locked,
       toolbar: <div className="round-toolbar"><div><strong>{mine.submitted ? 'Song submitted. Waiting for the others…' : 'One prompt. One song. Make it yours.'}</strong><p>{progress}</p></div><span className="round-clock" aria-label="Time remaining">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>{connectionNote && <p role="status">{connectionNote}</p>}{notice && <p role="status">{notice}</p>}</div>,
-      saveStatus: mine.submitted ? 'Submitted — your song is locked in.' : !connected ? 'Offline — editing paused until you reconnect.' : seconds === 0 ? 'Time is up. Opening results…' : revision > savedRevision ? 'Saving…' : 'All changes saved.',
+      saveStatus: mine.submitted ? 'Submitted — your song is locked in.' : !connected ? 'Offline — editing paused until you reconnect.' : seconds === 0 ? 'Time is up. Opening results…' : revision > savedRevision ? 'Saving…' : 'Arrangement saved · Keep this tab open while audio is shared.',
       onSongChange: (song: Song) => {
         const next = ++revisionRef.current
         setRevision(next)

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { Peers } from '../p2p/Peers'
+import type { Song } from '../game/types'
 import type { Lobby, ServerMessage, Session } from './lobby'
 
 const storageKey = 'beat-telephone-session'
@@ -6,7 +8,7 @@ function readSession(): Session | null {
   try {
     const data = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null')
     const invite = new URLSearchParams(location.search).get('room')
-    return data && typeof data.roomId === 'string' && typeof data.token === 'string' && typeof data.playerId === 'string' && (!invite || invite === data.roomId) ? data : null
+    return data && typeof data.roomId === 'string' && /^[a-f0-9]{32}$/.test(data.roomId) && typeof data.token === 'string' && typeof data.playerId === 'string' && (!invite || invite === data.roomId) ? data : null
   } catch { return null }
 }
 function saveSession(value: Session | null) {
@@ -23,77 +25,115 @@ function updateInvite(roomId?: string) {
 }
 
 export function useLobby() {
+  const rawRoom = useRef<Lobby | null>(null)
+  const peers = useRef<Peers | null>(null)
+  const opening = useRef<Record<string, unknown> | null>(null)
+  const transferQueue = useRef(Promise.resolve())
+  const sending = useRef(false)
   const [lobby, setLobby] = useState<Lobby | null>(null)
   const [session, setSession] = useState(readSession)
   const sessionRef = useRef(session)
   const socket = useRef<WebSocket | null>(null)
   const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [connectionVersion, setConnectionVersion] = useState(0)
-  const [status, setStatus] = useState('Connecting to lobby server…')
-  const [connected, setConnected] = useState(false)
+  const [status, setStatus] = useState('Ready to create or join a room')
+  const [connected, setConnected] = useState(true)
   const [pending, setPending] = useState(false)
   const [notice, setNotice] = useState('')
   const [savedRevision, setSavedRevision] = useState(0)
   const [invite, setInvite] = useState(new URLSearchParams(location.search).get('room') ?? '')
 
+  function refreshRoom() {
+    const room = rawRoom.current
+    if (!room?.game || !peers.current) { setLobby(room); return }
+    const game = room.game
+    const own = game.mine ? peers.current.hydrate(game.mine.song) : null
+    const results = game.results.map(result => ({ ...result, song: peers.current!.hydrate(result.song) }))
+    setLobby({ ...room, game: { ...game,
+      audioPending: game.phase === 'music' ? !!game.mine && !own : results.some(result => !result.song),
+      mine: game.mine ? { ...game.mine, song: own ?? game.mine.song } : null,
+      results: game.results.map((result, index) => ({ ...result, song: results[index].song ?? result.song })),
+    } })
+  }
+
   useEffect(() => {
     let disposed = false
     let retry: ReturnType<typeof setTimeout>
+    let heartbeat: ReturnType<typeof setInterval>
     let attempts = 0
+    const manager = new Peers(message => {
+      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify(message))
+    }, refreshRoom, setNotice)
+    peers.current = manager
     const connect = () => {
-      const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/lobby`)
+      const roomId = sessionRef.current?.roomId ?? String(opening.current?.roomId ?? '')
+      if (!roomId) { setConnected(true); setStatus('Ready to create or join a room'); return }
+      setPending(true); sending.current = true
+      const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/lobby?room=${encodeURIComponent(roomId)}`)
       socket.current = ws
+      timeout.current = setTimeout(() => ws.close(), 10_000)
       ws.onopen = () => {
         if (disposed || socket.current !== ws) return
         attempts = 0
         setConnected(true)
-        setStatus('Connected')
-        if (sessionRef.current) {
-          setPending(true)
-          ws.send(JSON.stringify({ type: 'resume', ...sessionRef.current }))
-          timeout.current = setTimeout(() => ws.close(), 8000)
-        }
+        setStatus('Connected · Checking direct audio connections')
+        const request = sessionRef.current ? { type: 'resume', ...sessionRef.current } : opening.current
+        if (request) ws.send(JSON.stringify(request))
+        heartbeat = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping') }, 25_000)
       }
       ws.onmessage = event => {
-        if (disposed || socket.current !== ws) return
+        if (disposed || socket.current !== ws || event.data === 'pong') return
         const message = JSON.parse(event.data) as ServerMessage
-        if (message.type !== 'room' && message.type !== 'draft_saved') { setPending(false); clearTimeout(timeout.current) }
+        if (message.type === 'signal') { manager.signal(message.from, message.signal); return }
+        if (message.type !== 'room' && message.type !== 'draft_saved') { sending.current = false; setPending(false); clearTimeout(timeout.current) }
         if (message.type === 'joined') {
+          opening.current = null
           sessionRef.current = message.session
           saveSession(message.session)
           setSession(message.session)
-          setLobby(message.room)
+          rawRoom.current = message.room
+          manager.sync(message.room, message.session.playerId)
+          manager.report()
+          refreshRoom()
           setInvite(message.room.id)
           updateInvite(message.room.id)
-          setNotice(message.room.game ? 'Reconnected to your game.' : 'You’re in. Share the invite link to bring friends in.')
-        } else if (message.type === 'room') setLobby(message.room)
-        else if (message.type === 'draft_saved') setSavedRevision(message.revision)
+          setNotice('Keep this tab open. Recordings are shared directly with other players; there is no cloud audio backup.')
+        } else if (message.type === 'room') {
+          rawRoom.current = message.room
+          if (sessionRef.current) manager.sync(message.room, sessionRef.current.playerId)
+          refreshRoom()
+        } else if (message.type === 'draft_saved') setSavedRevision(previous => Math.max(previous, message.revision))
         else if (message.type === 'notice') setNotice(message.message)
         else if (message.type === 'left' || message.type === 'error' && ['session_expired', 'session_in_use'].includes(message.code)) {
-          sessionRef.current = null
+          sessionRef.current = null; opening.current = null
           saveSession(null)
-          setSession(null)
-          setLobby(null)
+          setSession(null); rawRoom.current = null; setLobby(null); manager.reset()
           if (message.type === 'left') { setInvite(''); updateInvite(); setNotice('You left the lobby.') }
           else setNotice(message.message)
+          // No idle socket is needed on the home screen.
+          socket.current = null; ws.close(); clearInterval(heartbeat)
+          setConnected(true); setStatus('Ready to create or join a room')
         } else if (message.type === 'error') setNotice(message.message)
       }
       ws.onclose = () => {
         if (disposed || socket.current !== ws) return
-        setConnected(false)
-        setPending(false)
-        clearTimeout(timeout.current)
-        setStatus('Connection lost. Reconnecting…')
-        retry = setTimeout(connect, Math.min(1000 * 2 ** attempts++, 5000))
+        clearInterval(heartbeat); clearTimeout(timeout.current)
+        sending.current = false; setPending(false)
+        if (!sessionRef.current) {
+          opening.current = null; socket.current = null; setConnected(true)
+          setStatus('Ready to retry'); setNotice('Could not join. The room may have expired, the free quota may be exhausted, or the network may be unavailable.')
+          return
+        }
+        setConnected(false); setStatus('Connection lost. Reconnecting…')
+        retry = setTimeout(connect, Math.min(1000 * 2 ** attempts++, 30_000))
       }
       ws.onerror = () => ws.close()
     }
     connect()
     return () => {
       disposed = true
-      clearTimeout(retry)
-      clearTimeout(timeout.current)
-      socket.current?.close()
+      clearTimeout(retry); clearTimeout(timeout.current); clearInterval(heartbeat)
+      manager.close(); socket.current?.close()
     }
   }, [connectionVersion])
 
@@ -102,6 +142,7 @@ export function useLobby() {
     // Invalidate the old connection before queued joined/room messages arrive.
     socket.current = null
     sessionRef.current = null
+    rawRoom.current = null; opening.current = null; sending.current = false; transferQueue.current = Promise.resolve()
     saveSession(null)
     clearTimeout(timeout.current)
     setSession(null); setLobby(null); setInvite(''); setNotice(''); setSavedRevision(0)
@@ -113,18 +154,41 @@ export function useLobby() {
   }
 
   function send(type: string, extra: Record<string, unknown> = {}) {
-    if (socket.current?.readyState !== WebSocket.OPEN || pending) return
-    setNotice('')
-    setPending(true)
-    socket.current.send(JSON.stringify({ type, ...extra }))
-    timeout.current = setTimeout(() => {
-      setNotice('The server did not respond. Reconnecting…')
-      socket.current?.close()
-    }, 8000)
+    if (sending.current) return
+    if (type === 'create' || type === 'join') {
+      const roomId = type === 'create' ? crypto.randomUUID().replaceAll('-', '') : String(extra.roomId)
+      if (!/^[a-f0-9]{32}$/.test(roomId)) { setNotice('This invite is invalid. Ask for a new link.'); return }
+      opening.current = { type, ...extra, roomId }
+      sending.current = true; setPending(true); setNotice('Connecting…')
+      setConnectionVersion(version => version + 1)
+      return
+    }
+    if (socket.current?.readyState !== WebSocket.OPEN) return
+    setNotice(''); setPending(true); sending.current = true
+    const ws = socket.current
+    const manager = peers.current
+    transferQueue.current = transferQueue.current.catch(() => {}).then(async () => {
+      let payload = extra
+      if (type === 'submit_song' && manager) {
+        setNotice('Sharing your recordings with the other players… Keep this tab open.')
+        const song = await manager.prepare(extra.song as Song)
+        // Save metadata before waiting, so timeout results retain the latest arrangement.
+        if (socket.current === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'draft', ...extra, song }))
+        await manager.shared(song)
+        payload = { ...extra, song }
+      }
+      if (socket.current !== ws || ws.readyState !== WebSocket.OPEN) throw new Error('Reconnect before submitting.')
+      ws.send(JSON.stringify({ type, ...payload }))
+      timeout.current = setTimeout(() => { setNotice('The server did not respond. Reconnecting…'); ws.close() }, 8000)
+    }).catch(error => { if (socket.current !== ws) return; sending.current = false; setPending(false); setNotice(error instanceof Error ? error.message : 'Unable to share song.') })
   }
   function saveDraft(extra: Record<string, unknown>) {
-    if (socket.current?.readyState !== WebSocket.OPEN) return false
-    socket.current.send(JSON.stringify({ type: 'draft', ...extra }))
+    const ws = socket.current, manager = peers.current
+    if (ws?.readyState !== WebSocket.OPEN || !manager || sending.current) return false
+    transferQueue.current = transferQueue.current.catch(() => {}).then(async () => {
+      const song = await manager.prepare(extra.song as Song)
+      if (socket.current === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'draft', ...extra, song }))
+    }).catch(error => { if (socket.current === ws) setNotice(error instanceof Error ? error.message : 'Draft could not be saved.') })
     return true
   }
   function clearInvite() { setInvite(''); updateInvite(); setNotice('') }

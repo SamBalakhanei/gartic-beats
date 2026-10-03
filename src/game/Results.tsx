@@ -28,9 +28,9 @@ export default function Results({ game, isHost, hostName, hostConnected, connect
     let current = true
     const machine = engine.current!
     machine.stop(); setError('')
-    if (enabled && connected && visible && game.reveal.playing && latest.current) void machine.start(latest.current.song).catch(cause => { if (current) setError(cause instanceof Error ? cause.message : 'Unable to play this song.') })
+    if (!game.audioPending && enabled && connected && visible && game.reveal.playing && latest.current) void machine.start(latest.current.song).catch(cause => { if (current) setError(cause instanceof Error ? cause.message : 'Unable to play this song.') })
     return () => { current = false; machine.stop() }
-  }, [game.reveal.index, game.reveal.revision, game.reveal.playing, enabled, connected, visible])
+  }, [game.reveal.index, game.reveal.revision, game.reveal.playing, enabled, connected, visible, game.audioPending])
   function control(action: string) { send('reveal', { gameId: game.id, revision: game.reveal.revision, action }) }
   async function enable(andPlay = false) {
     const revision = game.reveal.revision
@@ -54,13 +54,13 @@ export default function Results({ game, isHost, hostName, hostConnected, connect
       <blockquote>“{result.prompt}”</blockquote><p className="card-note">Prompt by {result.promptAuthor}</p>
       <div className={`reveal-disc ${playing ? 'playing' : ''}`} aria-hidden="true">♫</div>
       <p className="card-note">{result.song.bpm} BPM · {songVocals(result.song).length} vocal layers · {result.song.piano?.notes.length ?? 0} piano notes{result.automatic ? ' · Saved automatically' : ''}</p>
-      <p role="status">{playing ? 'Now playing' : game.reveal.playing && !enabled ? 'The host is playing this song. Enable sound to listen.' : game.reveal.playing && !visible ? 'Playback resumes when you return.' : 'Ready to listen'}</p>
+      <p role="status">{game.audioPending ? 'Waiting for recordings from another player. Keep their tab open; a missing copy cannot be played.' : playing ? 'Now playing' : game.reveal.playing && !enabled ? 'The host is playing this song. Enable sound to listen.' : game.reveal.playing && !visible ? 'Playback resumes when you return.' : 'Ready to listen'}</p>
       <button className="secondary-button" disabled={!connected || unlocking} onClick={() => enabled ? setEnabled(false) : void enable()}>{unlocking ? 'Enabling…' : enabled ? 'Mute on my device' : 'Enable sound'}</button>
       {!result.song.piano?.notes.length && !songVocals(result.song).length && !Object.values(result.song.pattern).some(track => track.some(Boolean)) && <p className="card-note">No notes were added to this song.</p>}
     </article>
     {isHost ? <div className="reveal-controls" aria-label="Host reveal controls">
       <button className="secondary-button" disabled={disabled || game.reveal.index === 0} onClick={() => control('previous')}>← Previous</button>
-      <button className="play-button" disabled={disabled} onClick={() => game.reveal.playing ? control('stop') : void enable(true)}>{game.reveal.playing ? 'Stop for everyone' : 'Play for everyone'}</button>
+      <button className="play-button" disabled={disabled || !!game.audioPending && !game.reveal.playing} onClick={() => game.reveal.playing ? control('stop') : void enable(true)}>{game.reveal.playing ? 'Stop for everyone' : 'Play for everyone'}</button>
       <button className="secondary-button" disabled={disabled || last} onClick={() => control('next')}>Next song →</button>
     </div> : <p className="reveal-wait" role="status">{!hostConnected ? 'The host disconnected. Waiting for them to return or a new host to take over…' : `Follow along—${hostName} controls playback and the next reveal.`}</p>}
     {last && <p className="reveal-wait">That’s everyone! {isHost ? 'Use Previous to revisit a song.' : 'The host can revisit any song.'}</p>}

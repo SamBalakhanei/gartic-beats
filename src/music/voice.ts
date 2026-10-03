@@ -40,3 +40,10 @@ export function validateVoice(value: unknown): VoiceTrack {
   if (energy / expectedSamples < 0.0000001) throw new Error('The recording is silent. Check your microphone and record again.')
   return { data: track.data, bpm: track.bpm }
 }
+
+// The coordinator accepts references only: audio never enters Cloudflare storage.
+export function validateVoiceReference(value: unknown): VoiceTrack {
+  const track = value as Partial<VoiceTrack> | null
+  if (!track || typeof track.data !== 'string' || !/^p2p:[a-f0-9]{64}$/.test(track.data) || !Number.isInteger(track.bpm) || track.bpm! < 40 || track.bpm! > 240) throw new Error('Invalid peer recording reference.')
+  return { data: track.data, bpm: track.bpm! }
+}

@@ -1,6 +1,6 @@
 import { validatePiano } from '../src/music/piano.ts'
 import { MAX_VOCAL_LAYERS, MIN_SAMPLE_BPM, MAX_SAMPLE_BPM, songVocals } from '../src/music/arrangement.ts'
-import { validateVoice } from '../src/music/voice.ts'
+import { validateVoice, validateVoiceReference } from '../src/music/voice.ts'
 import { randomInt, randomUUID } from 'node:crypto'
 import { emptyPattern, instruments, TOTAL_STEPS } from '../src/music/pattern.ts'
 import { DEFAULT_BPM, MIN_BPM, MAX_BPM } from '../src/music/tempo.ts'
@@ -46,7 +46,8 @@ export function submitPrompt(game: Game, id: string, text: unknown, now: number,
   assignPrompts(game, now, duration)
 }
 
-export function validateSong(value: unknown): Song {
+export function validateSong(value: unknown, referencesOnly = false): Song {
+  const voiceValidator = referencesOnly ? validateVoiceReference : validateVoice
   if (!value || typeof value !== 'object') throw new Error('Invalid song.')
   const { pattern, bpm, voice, mix, vocals, piano } = value as Partial<Song>
   if (typeof bpm !== 'number' || !Number.isInteger(bpm) || bpm < MIN_BPM || bpm > MAX_BPM || !pattern || typeof pattern !== 'object') throw new Error('Invalid song tempo or pattern.')
@@ -62,20 +63,20 @@ export function validateSong(value: unknown): Song {
   const validatedVocals = vocals?.map(clip => {
     if (!clip || typeof clip.id !== 'string' || !clip.id || clip.id.length > 64 || ids.has(clip.id) || typeof clip.name !== 'string' || !clip.name.trim() || clip.name.length > 32 ||
         !Number.isInteger(clip.bpm) || clip.bpm < MIN_SAMPLE_BPM || clip.bpm > MAX_SAMPLE_BPM || !Number.isFinite(clip.startStep) || clip.startStep < 0 || clip.startStep > 63 || !level(clip.volume)) throw new Error('Invalid vocal layer settings.')
-    const track = validateVoice(clip.voice)
+    const track = voiceValidator(clip.voice)
     const start = clip.trimStart ?? 0, end = clip.trimEnd ?? 960 / track.bpm
     if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end > 960 / track.bpm || end - start < 0.019) throw new Error('Invalid vocal trim.')
     ids.add(clip.id)
     return { id: clip.id, name: clip.name.trim(), voice: track, bpm: clip.bpm, startStep: clip.startStep, volume: clip.volume, ...(clip.trimStart !== undefined ? { trimStart: start } : {}), ...(clip.trimEnd !== undefined ? { trimEnd: end } : {}) }
   })
-  return { bpm, pattern: clean, ...(piano !== undefined ? { piano: validatePiano(piano) } : {}), ...(mix ? { mix: { beat: mix.beat, voice: mix.voice } } : {}), ...(validatedVocals ? { vocals: validatedVocals } : {}), ...(voice && !validatedVocals ? { voice: validateVoice(voice) } : {}) }
+  return { bpm, pattern: clean, ...(piano !== undefined ? { piano: validatePiano(piano) } : {}), ...(mix ? { mix: { beat: mix.beat, voice: mix.voice } } : {}), ...(validatedVocals ? { vocals: validatedVocals } : {}), ...(voice && !validatedVocals ? { voice: voiceValidator(voice) } : {}) }
 }
 
-export function saveSong(game: Game, id: string, value: unknown, submit: boolean, now: number) {
+export function saveSong(game: Game, id: string, value: unknown, submit: boolean, now: number, referencesOnly = false) {
   finishIfReady(game, now)
   const player = game.players.find(item => item.id === id)
   if (game.phase !== 'music' || !player || player.submitted) throw new Error('This song turn has already ended.')
-  const song = validateSong(value)
+  const song = validateSong(value, referencesOnly)
   if (submit && !songVocals(song).length) throw new Error('Record a voice track before submitting your song.')
   player.song = song
   if (submit) player.submitted = true

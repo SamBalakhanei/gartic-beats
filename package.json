@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host localhost --port 5173 --strictPort",
-    "build": "tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "preview": "vite preview --host localhost",
-    "test": "node --experimental-strip-types --test src/music/*.test.mjs src/lobby/*.test.mjs server/*.test.mjs"
+    "test": "node --experimental-strip-types --test src/music/*.test.mjs src/lobby/*.test.mjs server/*.test.mjs src/p2p/*.test.mjs",
+    "deploy": "npm run build && wrangler deploy",
+    "test:cloudflare": "npm run build && node --experimental-strip-types --test cloudflare/*.test.mjs"
   },
   "dependencies": {
     "react": "^19.3.0",
@@ -16,12 +18,16 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.62.5",
+    "@cloudflare/workers-types": "^5.20261003.1",
     "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.1.1",
+    "miniflare": "^5.20261001.0-alpha",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1"
+    "vite": "^8.3.1",
+    "wrangler": "^4.147.0"
   }
 }

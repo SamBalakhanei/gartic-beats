@@ -8,6 +8,7 @@ export type Song = { pattern: Pattern; bpm: number; voice?: VoiceTrack; mix?: Mi
 export type Result = { playerId: string; name: string; prompt: string; promptAuthor: string; song: Song; automatic: boolean }
 export type Reveal = { index: number; playing: boolean; revision: number }
 export type GameView = {
+  audioPending?: boolean
   reveal: Reveal
   id: string
   phase: 'prompts' | 'music' | 'results'

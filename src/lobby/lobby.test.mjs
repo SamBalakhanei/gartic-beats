@@ -11,3 +11,10 @@ test('start requires two connected players, not merely two reserved slots', () =
   room.players[1].connected = true
   assert.equal(canStart(room), true)
 })
+
+test('direct audio readiness gates start even with two connected players', () => {
+  const lobby = { players: [{ connected: true, peerReady: true }, { connected: true, peerReady: false }] }
+  assert.equal(canStart(lobby), false)
+  lobby.players[1].peerReady = true
+  assert.equal(canStart(lobby), true)
+})

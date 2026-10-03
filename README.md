@@ -81,3 +81,11 @@ Automated peer tests simulate data channels; they do not prove real internet NAT
 - `src/game/`: prompt turns and host-led reveal.
 
 Sandbox edits last for the current page session. Clicking Beat Telephone leaves the room and returns to `/home`.
+
+## Favicon and link previews
+
+`index.html` contains static Open Graph and Twitter card metadata, so crawlers can read it without running React. All routes share the same public preview; room names, prompts, and recordings are never included. The preview image uses an absolute URL on `https://beatphone.xyz` (update these URLs if the domain changes).
+
+`public/` contains the SVG/ICO favicon, Apple touch icon, and 1200×630 PNG share card. To regenerate the artwork, run `python3 scripts/generate-brand-assets.py` with Pillow and Arial or DejaVu Sans installed. Python is not needed for normal builds or deployment. When replacing the share image, bump its filename version and update the metadata to avoid stale image caches.
+
+Run `npm run deploy` to publish these files. After deployment, send a fresh link in Discord with link embeds enabled. Existing messages may keep their cached preview; a fresh URL such as `https://beatphone.xyz/?preview=1` can help check a new preview. Share links must be publicly accessible over HTTPS, including the `www` hostname if you use it.

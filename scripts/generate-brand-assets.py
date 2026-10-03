@@ -45,7 +45,7 @@ def text(x, y, value, size, color=WHITE, bold=False):
     d.text((x*S, y*S), value, font=font(size, bold), fill=color)
 
 im.paste(icon(64*S), (60*S, 52*S))
-text(140, 65, 'beat telephone', 33, bold=True)
+text(140, 65, 'beatphone', 33, bold=True)
 text(62, 172, 'Silly prompts.', 68, bold=True)
 text(62, 250, 'Serious beats.', 68, LIME, True)
 text(64, 358, 'Make a song. Surprise your friends.', 26)
@@ -66,4 +66,4 @@ for i, h in enumerate([10,18,30,16,42,56,24,36,16,46,60,32,18,40,24,12,28,46,20,
     box(773+i*12, 449-h/2, 6, h, LIME, 3)
 box(738, 490, 265, 47, PURPLE, 14)
 text(758, 502, 'One prompt. Your sound.', 20, BG, True)
-im.resize((1200, 630), Image.Resampling.LANCZOS).save(OUT / 'social-preview-v1.png', optimize=True)
+im.resize((1200, 630), Image.Resampling.LANCZOS).save(OUT / 'social-preview-v2.png', optimize=True)

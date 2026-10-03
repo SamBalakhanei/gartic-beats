@@ -1,4 +1,4 @@
-# Beat Telephone
+# Beatphone
 
 A browser music party game for 2–8 friends. Everyone writes a prompt, then adds one part to each other player’s song chain. Only the first musician sees the prompt; later musicians hear the accumulated song and append a fresh section. Each of the player-count-minus-one music rounds lasts up to ten minutes or until everyone submits. The host reveals each original prompt, then each player’s section in a separate compact conversation per prompt. Reveal playback plays that player’s section alone. The sandbox has eight synthesized instruments, an in-key piano editor, and up to four vocal layers with independent pitch/speed, trim, placement, and mix controls.
 
@@ -80,7 +80,7 @@ Automated peer tests simulate data channels; they do not prove real internet NAT
 - `src/Studio.tsx`, `src/music/`: editor, synthesis, recording, and playback.
 - `src/game/`: prompt turns and host-led reveal.
 
-Sandbox edits last for the current page session. Clicking Beat Telephone leaves the room and returns to `/home`.
+Sandbox edits last for the current page session. Clicking Beatphone leaves the room and returns to `/home`.
 
 ## Favicon and link previews
 

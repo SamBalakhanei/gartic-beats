@@ -12,6 +12,8 @@ export default function App() {
   const [guestName, setGuestName] = useState('')
   const [motionPaused, setMotionPaused] = useState(false)
   const heading = useRef<HTMLHeadingElement>(null)
+  const nameInput = useRef<HTMLInputElement>(null)
+  const roomPanel = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const navigate = () => {
@@ -44,14 +46,14 @@ export default function App() {
         <div className="landing-atmosphere" aria-hidden="true"><div className="ambient-glow glow-lime" /><div className="ambient-glow glow-purple" /><div className="ambient-rings"><i /><i /><i /></div></div>
         <header className="brand-row">
           <Brand onHome={home} />
-          <nav className="landing-nav" aria-label="Main navigation"><a href="#how-to-play">How to play</a><a className="nav-sandbox" href="#sandbox">Sandbox <span aria-hidden="true">↗</span></a></nav>
+          <nav className="landing-nav" aria-label="Main navigation"><a href="#how-to-play">How to play</a></nav>
         </header>
         <div className="landing-hero">
           <section className="landing-story">
             <p className="landing-kicker"><span aria-hidden="true" /> A music party for your group chat</p>
-            <h1 ref={heading} tabIndex={-1}>{lobby ? <>Your band.<br /><em>Assemble.</em></> : <>Make music.<br /><em>See where it goes.</em></>}</h1>
-            <p className="landing-description">{lobby ? 'Send the invite. Get everyone in. Let the questionable musical decisions begin.' : 'Write a ridiculous prompt. Make a little music. Pass it on—and hear how far your friends take it.'}</p>
-            <div className="hero-sandbox-row"><a className="hero-sandbox-button" href="#sandbox"><span aria-hidden="true">♫</span> Go to Sandbox <span aria-hidden="true">↗</span></a><span>Jump straight into the studio.<br />No room needed.</span></div>
+            <h1 ref={heading} tabIndex={-1}>{lobby ? <>Your band.<br /><em>Assemble.</em></> : <>The music game<br /><em>for your group chat.</em></>}</h1>
+            <p className="landing-description">{lobby ? 'Send the invite. Get everyone in. Let the questionable musical decisions begin.' : 'Create a private game for 2–8 friends. Turn silly prompts into songs, take turns adding a section, then reveal what everyone made.'}</p>
+            <div className="hero-game-row"><button className="hero-game-button" onClick={() => { if (lobby) roomPanel.current?.focus(); else nameInput.current?.focus() }}>{lobby ? 'Your lobby' : invite ? 'Join game' : 'Create game'} <span aria-hidden="true">→</span></button><span>{lobby ? 'Invite your friends and get ready.' : invite ? 'Your friends are waiting.' : 'Start a room. Share the link.'}<br />No accounts needed.</span></div>
             <div className="landing-facts"><span>2–8 friends</span><span>Free to play</span><span>No musical skills required</span></div>
             <div className="idea-demo" aria-label="Example: a cat in a jazz club becomes a song made by three friends">
               <div className="demo-caption"><span>ONE IDEA. EVERYONE’S SOUND.</span><span aria-hidden="true">↘</span></div>
@@ -62,7 +64,7 @@ export default function App() {
               <p className="demo-footnote">Nobody knows where this is going. That’s the point.</p>
             </div>
           </section>
-          <section className="home-card lobby-card" aria-labelledby="lobby-title">
+          <section ref={roomPanel} tabIndex={-1} className="home-card lobby-card" aria-labelledby="lobby-title">
             <div className="card-heading"><h2 id="lobby-title">{lobby ? 'The green room' : invite ? 'You’re on the guest list.' : 'Get the band together.'}</h2>{lobby && <span className="badge">{lobby.players.length} / {MAX_PLAYERS} players</span>}</div>
             {lobby ? <>
               <p className="card-note" role="status">{status}</p>
@@ -86,7 +88,7 @@ export default function App() {
                 send(invite ? 'join' : 'create', { name: guestName, roomId: invite })
               }}>
                 <label htmlFor="guest-name">Your name</label>
-                <div className="guest-input-row"><input id="guest-name" value={guestName} onChange={event => setGuestName(event.target.value)} maxLength={24} placeholder="Your stage name" autoComplete="nickname" required /></div>
+                <div className="guest-input-row"><input ref={nameInput} id="guest-name" value={guestName} onChange={event => setGuestName(event.target.value)} maxLength={24} placeholder="Your stage name" autoComplete="nickname" required /></div>
                 <button className="play-button home-primary" disabled={!connected || pending || !guestName.trim()} type="submit">{pending ? 'Connecting…' : invite ? 'Join lobby' : 'Create game →'}</button>
               </form>
               {invite && <button className="text-button" disabled={pending} onClick={clearInvite}>Create a different lobby</button>}
@@ -100,7 +102,7 @@ export default function App() {
             <li><span>02</span><div><strong>Follow your ears.</strong><p>The prompt disappears. Listen to the song so far and add what comes next.</p></div></li>
             <li><span>03</span><div><strong>Hear what happened.</strong><p>Reveal the original idea and everyone’s contribution. Blame your friends.</p></div></li>
           </ol></div>
-          <aside className="landing-sandbox" aria-labelledby="sandbox-title"><span className="sandbox-symbol" aria-hidden="true">♫</span><p className="eyebrow">Not waiting for the group chat?</p><h2 id="sandbox-title">Make some noise.<br />Just for you.</h2><p>Drums, piano, and your own voice. Explore the studio at your own pace.</p><a className="sandbox-cta" href="#sandbox">Go to Sandbox <span aria-hidden="true">↗</span></a><small>No room needed. No pressure.</small></aside>
+          <aside className="landing-sandbox" aria-labelledby="sandbox-title"><span className="sandbox-symbol" aria-hidden="true">♫</span><p className="eyebrow">Want to practice first?</p><h2 id="sandbox-title">Try the instruments.</h2><p>Get comfortable with drums, piano, and recording before your next game.</p><a className="sandbox-cta" href="#sandbox">Practice in Sandbox <span aria-hidden="true">↗</span></a><small>No room needed. No pressure.</small></aside>
         </section>
         <footer className="page-footer landing-footer"><p role="status">{notice}</p><button className="motion-toggle" aria-pressed={motionPaused} onClick={() => setMotionPaused(value => !value)}>{motionPaused ? 'Resume background motion' : 'Pause background motion'}</button><p>Made for friends. Best enjoyed slightly out of tune.</p></footer>
       </main>

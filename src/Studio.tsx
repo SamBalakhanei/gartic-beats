@@ -17,7 +17,7 @@ import type { VocalClip, Mix } from './music/arrangement'
 
 type Arrangement = Song & { piano: PianoTrack; mix: Mix; vocals: VocalClip[] }
 type GameStudio = {
-  initialSong: Song; prompt: string; disabled: boolean; toolbar: ReactNode; saveStatus: string
+  initialSong: Song; prompt: string | null; disabled: boolean; toolbar: ReactNode; saveStatus: string
   onSongChange: (song: Song) => void; onSubmit: (song: Song) => void
 }
 const presets: { id: Preset; label: string }[] = [
@@ -26,26 +26,34 @@ const presets: { id: Preset; label: string }[] = [
 
 export default function Studio({ active, hasLobby, game, onHome }: { onHome: () => void; active: boolean; hasLobby: boolean; game?: GameStudio }) {
   const titleId = useId()
-  const [song, setSong] = useState<Arrangement>(() => {
+  const [editableSong, setSong] = useState<Arrangement>(() => {
     const initial = game?.initialSong ?? { pattern: createPreset('soul'), bpm: DEFAULT_BPM }
-    return { piano: initial.piano ?? emptyPiano(), pattern: initial.pattern, bpm: initial.bpm, mix: initial.mix ?? { ...DEFAULT_MIX }, vocals: songVocals(initial) }
+    return { layers: initial.layers, piano: initial.piano ?? emptyPiano(), pattern: initial.pattern, bpm: initial.bpm, mix: initial.mix ?? { ...DEFAULT_MIX }, vocals: songVocals(initial) }
   })
-  const songRef = useRef(song)
+  const backing = editableSong.layers ?? []
+  const [sectionIndex, setSectionIndex] = useState(Math.max(0, backing.length - 1))
+  const inspecting = sectionIndex < backing.length
+  const earlier = backing[sectionIndex]
+  const song: Arrangement = earlier ? { ...earlier, piano: earlier.piano ?? emptyPiano(), mix: earlier.mix ?? { ...DEFAULT_MIX }, vocals: songVocals(earlier) } : editableSong
+  const songRef = useRef(editableSong)
+  const playSection = useRef<number | undefined>(undefined)
   const history = useRef<Arrangement[]>([])
   const machine = useRef<DrumMachine | null>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
   const [selected, setSelected] = useState<string | null>(song.vocals[0]?.id ?? null)
   const [recordTarget, setRecordTarget] = useState('new')
-  const [panel, setPanel] = useState<'piano' | 'drums' | 'vocals'>('piano')
+  const [panel, setPanel] = useState<'piano' | 'drums' | 'vocals'>(() => song.piano.notes.length ? 'piano' : Object.values(song.pattern).some(track => track.some(Boolean)) ? 'drums' : song.vocals.length ? 'vocals' : 'piano')
   const [snap, setSnap] = useState(true)
   const [bar, setBar] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [starting, setStarting] = useState(false)
   const [recording, setRecording] = useState(false)
-  const [step, setStep] = useState(-1)
+  const [songStep, setStep] = useState(-1)
   const [error, setError] = useState('')
-  const [message, setMessage] = useState('Build a beat, then record your first vocal layer.')
-  const locked = !!game?.disabled || recording || starting
+  const [message, setMessage] = useState('Add drums, piano, or vocals. Make this part your own.')
+  const step = songStep >= 0 && Math.floor(songStep / TOTAL_STEPS) === sectionIndex ? songStep % TOTAL_STEPS : -1
+  const busy = !!game?.disabled || recording || starting
+  const locked = busy || inspecting
   const selectedClip = song.vocals.find(clip => clip.id === selected)
   const targetClip = song.vocals.find(clip => clip.id === recordTarget)
   const onSongChange = useRef(game?.onSongChange); onSongChange.current = game?.onSongChange
@@ -62,21 +70,22 @@ export default function Studio({ active, hasLobby, game, onHome }: { onHome: () 
     if (!active || game?.disabled) machine.current?.stop()
     else titleRef.current?.focus()
   }, [active, game?.disabled])
-  useEffect(() => { if (!game?.disabled) onSongChange.current?.(song) }, [song, game?.disabled])
+  useEffect(() => { if (!game?.disabled) onSongChange.current?.(editableSong) }, [editableSong, game?.disabled])
 
-  async function play(next = songRef.current) {
-    setStarting(true); setError('')
-    try { await machine.current?.start(next) }
+  async function play(next = songRef.current, section?: number) {
+    setStarting(true); setError(''); playSection.current = section
+    try { await machine.current?.start(next, section) }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Unable to play the song.') }
     finally { setStarting(false) }
   }
   function apply(next: Arrangement, description: string, remember = true) {
+    if (inspecting) return
     const old = songRef.current
     if (remember) history.current = [...history.current.slice(-19), old]
     const timingChanged = old.bpm !== next.bpm || old.vocals.length !== next.vocals.length || old.vocals.some((clip, index) => { const other = next.vocals[index]; return clip.id !== other.id || clip.bpm !== other.bpm || clip.startStep !== other.startStep || clip.trimStart !== other.trimStart || clip.trimEnd !== other.trimEnd || clip.voice.data !== other.voice.data })
     songRef.current = next; setSong(next); setMessage(description)
     machine.current?.setSong(next)
-    if (playing && timingChanged && !recording) void play(next)
+    if (playing && timingChanged && !recording) void play(next, playSection.current)
   }
   function undo() { const old = history.current.pop(); if (old) apply(old, 'Last edit undone.', false) }
   function editClip(id: string, patch: Partial<VocalClip>) {
@@ -101,15 +110,29 @@ export default function Studio({ active, hasLobby, game, onHome }: { onHome: () 
     <header className="brand-row"><Brand onHome={onHome} />{game ? <span className="badge">Song round</span> : <a className="secondary-button" href="#home">← Back to {hasLobby ? 'lobby' : 'home'}</a>}</header>
     {game?.toolbar}
     {game ? <section className="game-studio-prompt" aria-labelledby={titleId}>
-      <p className="eyebrow">Your prompt</p>
-      <h1 ref={titleRef} id={titleId} tabIndex={-1}>{game.prompt}</h1>
+      <p className="eyebrow">{game.prompt ? 'Your prompt · First music turn' : 'Follow the music'}</p>
+      <h1 ref={titleRef} id={titleId} tabIndex={-1}>{game.prompt ?? 'Listen. Imagine. Add your part.'}</h1>
+      {backing.length > 0 && <p>Listen to the song so far, then write what happens next. Select an earlier section to see its notes and recordings. The original prompt stays hidden.</p>}
     </section> : <h1 ref={titleRef} id={titleId} className="sr-only" tabIndex={-1}>Sandbox studio</h1>}
+    {game && <section className="song-sections" aria-label="Song sections">
+      <div className="section-heading"><strong>Song timeline</strong><span>{((backing.length + 1) * TOTAL_STEPS * stepSeconds(song.bpm)).toFixed(1)}s total · Sections play in order</span></div>
+      <div className="section-list" role="group" aria-label="Choose a section to inspect or edit">
+        {[...backing, editableSong].map((part, index) => <button key={index} disabled={recording || starting} aria-pressed={sectionIndex === index} className={`section-card ${songStep >= 0 && Math.floor(songStep / TOTAL_STEPS) === index ? 'sounding' : ''}`} onClick={() => { setSectionIndex(index); setSelected(songVocals(part)[0]?.id ?? null); setBar(0) }}>
+          <strong>{index === backing.length ? 'Your section' : `Section ${index + 1}`}</strong>
+          <span>{(index * TOTAL_STEPS * stepSeconds(song.bpm)).toFixed(1)}–{((index + 1) * TOTAL_STEPS * stepSeconds(song.bpm)).toFixed(1)}s · {index === backing.length ? 'Editable' : 'Read only'}</span>
+          <div className="section-mini" aria-hidden="true">{Array.from({ length: 16 }, (_, beat) => <i key={beat} className={instruments.some(({ id }) => part.pattern[id].slice(beat * 4, beat * 4 + 4).some(Boolean)) || part.piano?.notes.some(n => Math.floor(n.start / 4) === beat) ? 'filled' : ''} />)}</div>
+          <small>{part.piano?.notes.length ?? 0} piano notes · {songVocals(part).length} vocal clips</small>
+        </button>)}
+      </div>
+      <p role="status">{inspecting ? `Viewing section ${sectionIndex + 1}. Its notes and recordings are preserved. Select Your section to continue writing.` : 'Editing your section. It plays after the earlier sections.'}</p>
+    </section>}
     <div className="studio-transport">
       <button className={`play-button ${playing ? 'is-playing' : ''}`} disabled={!!game?.disabled || recording || starting} onClick={() => playing ? machine.current?.stop() : void play()}>{starting ? 'Starting…' : playing ? '■ Stop' : '▶ Play song'}</button>
-      <fieldset disabled={locked} className="transport-tempo"><NumberControl label="Beat BPM" value={song.bpm} min={MIN_BPM} max={MAX_BPM} onChange={bpm => apply({ ...songRef.current, bpm }, 'Beat tempo updated. Vocal BPMs stay independent.')} /><span>4 bars · {Number((TOTAL_STEPS * stepSeconds(song.bpm)).toFixed(1))}s</span></fieldset>
-      <VoiceRecorder bpm={song.bpm} targetName={targetClip?.name} disabled={!!game?.disabled || !active || starting || (!targetClip && song.vocals.length >= MAX_VOCAL_LAYERS)} onBusy={setRecording} onTake={recordTake} prepareBeat={async () => { await machine.current?.prepare() }} startBeat={async () => machine.current?.start(songRef.current)} stopBeat={() => machine.current?.stop()} />
+      {game && <button className="secondary-button" disabled={busy} onClick={() => void play(songRef.current, sectionIndex)}>▶ Preview section {sectionIndex + 1}</button>}
+      <fieldset disabled={locked || backing.length > 0} className="transport-tempo"><NumberControl label="Beat BPM" value={song.bpm} min={MIN_BPM} max={MAX_BPM} onChange={bpm => apply({ ...songRef.current, bpm }, 'Beat tempo updated. Vocal BPMs stay independent.')} /><span>4 bars · {Number((TOTAL_STEPS * stepSeconds(song.bpm)).toFixed(1))}s</span></fieldset>
+      <VoiceRecorder bpm={song.bpm} targetName={targetClip?.name} disabled={inspecting || !!game?.disabled || !active || starting || (!targetClip && song.vocals.length >= MAX_VOCAL_LAYERS)} onBusy={setRecording} onTake={recordTake} prepareBeat={async () => { await machine.current?.prepare() }} startBeat={async () => { playSection.current = backing.length; return machine.current?.start(songRef.current, backing.length) }} stopBeat={() => machine.current?.stop()} />
       <label className="record-destination">Record into<select value={targetClip ? recordTarget : 'new'} disabled={locked} onChange={event => setRecordTarget(event.target.value)}><option value="new">New vocal layer</option>{song.vocals.map(clip => <option value={clip.id} key={clip.id}>Replace {clip.name}</option>)}</select></label>
-      {game && <div className="transport-submit"><button className="secondary-button" disabled={locked || !song.vocals.length} onClick={() => game.onSubmit(songRef.current)}>Submit song</button><span role="status">{game.saveStatus}</span></div>}
+      {game && <div className="transport-submit"><button className="secondary-button" disabled={busy} onClick={() => game.onSubmit(songRef.current)}>Submit part</button><span role="status">{game.saveStatus}</span></div>}
     </div>
     <div className="studio-tabs" role="group" aria-label="Choose instrument editor">
       {(['piano', 'drums', 'vocals'] as const).map(tab => <button key={tab} aria-pressed={panel === tab} onClick={() => setPanel(tab)}>{tab === 'piano' ? '♫ Piano' : tab === 'drums' ? '▦ Drums' : '● Vocals'}<small>{tab === 'piano' ? `${song.piano.notes.length} notes` : tab === 'drums' ? `${notes} hits` : `${song.vocals.length} layers`}</small></button>)}
@@ -117,15 +140,15 @@ export default function Studio({ active, hasLobby, game, onHome }: { onHome: () 
     </div>
     <div className={`studio-workspace panel-${panel}`}>
       <div className="arrangement-main">
-        <fieldset className="studio-controls" disabled={locked}>
+        <fieldset className="studio-controls" disabled={busy}>
           {panel === 'piano' && <PianoEditor track={song.piano} disabled={locked} step={step} onChange={(piano, message) => apply({ ...songRef.current, piano }, message)} onPreview={degree => { void machine.current?.previewPiano(degree).catch(cause => setError(cause instanceof Error ? cause.message : 'Unable to preview piano.')) }} />}
           <section hidden={panel !== 'vocals'} className="arrangement-panel" aria-label="Song timeline">
             <div className="panel-title"><h2>Arrangement</h2><button className="snap-toggle" aria-pressed={snap} onClick={() => setSnap(!snap)}>Snap {snap ? 'on' : 'off'}</button><span>{song.vocals.length} / {MAX_VOCAL_LAYERS} vocal layers</span></div>
             <div className="timeline-scroll"><div className="timeline">
               <div className="timeline-ruler"><span>4-bar loop</span><div>{Array.from({ length: 16 }, (_, i) => <span key={i}>{i % 4 === 0 ? `Bar ${i / 4 + 1}` : '·'}</span>)}</div></div>
               <div className="timeline-lane beat-lane"><span>Drums</span><div className="beat-overview">{Array.from({ length: TOTAL_STEPS }, (_, i) => <i key={i} className={`${instruments.some(({ id }) => song.pattern[id][i]) ? 'has-hit' : ''} ${step === i ? 'at-playhead' : ''}`} />)}</div></div>
-              {song.vocals.map((clip, index) => <VocalLane key={clip.id} clip={clip} index={index} beatBpm={song.bpm} selected={selected === clip.id} step={step} onSelect={() => setSelected(clip.id)} disabled={locked} snap={snap} onEdit={patch => editClip(clip.id, patch)} />)}
-              {!song.vocals.length && <div className="timeline-empty">Press <strong>Record voice</strong> above to add a sample. Layer harmonies, ad-libs, or a pitched-up hook.</div>}
+              {song.vocals.map((clip, index) => <VocalLane key={clip.id} clip={clip} index={index} beatBpm={song.bpm} selected={selected === clip.id} step={step} onSelect={() => setSelected(clip.id)} disabled={locked} selectable={inspecting} snap={snap} onEdit={patch => editClip(clip.id, patch)} />)}
+              {!song.vocals.length && <div className="timeline-empty">{inspecting ? "No vocal clips in this section." : <>Press <strong>Record voice</strong> above to add a sample. Layer harmonies, ad-libs, or a pitched-up hook.</>}</div>}
             </div></div>
             <p className="panel-hint">Drag a clip to move it. Drag either edge to trim. Hold Shift for fine placement. Arrow keys nudge; Escape cancels a drag.</p>
           </section>
@@ -159,7 +182,7 @@ export default function Studio({ active, hasLobby, game, onHome }: { onHome: () 
                         const localStep = beat * 4 + subdivision
                         const absoluteStep = bar * STEPS_PER_BAR + localStep
                         const on = song.pattern[id][absoluteStep]
-                        return <button key={localStep}
+                        return <button key={localStep} disabled={locked}
                           className={`step ${on ? 'active' : ''} ${step === absoluteStep ? 'current' : ''}`}
                           aria-label={`${name}, bar ${bar + 1}, beat ${beat + 1}, step ${subdivision + 1}`}
                           aria-pressed={on}
@@ -177,21 +200,21 @@ export default function Studio({ active, hasLobby, game, onHome }: { onHome: () 
         <div className="editor-footer">
           <p><span className="legend-square" aria-hidden="true" /> Lit squares make a sound. Tap an instrument to hear it.</p>
           <div className="edit-actions">
-            <button onClick={() => apply({ ...songRef.current, pattern: clearBar(songRef.current.pattern, bar) }, `Bar ${bar + 1} cleared. Undo brings it back.`)} disabled={barIsEmpty}>Clear bar</button>
-            <button onClick={() => apply({ ...songRef.current, pattern: emptyPattern() }, 'Beat cleared. Start fresh, or undo to bring it back.')} disabled={notes === 0}>Clear all</button>
+            <button onClick={() => apply({ ...songRef.current, pattern: clearBar(songRef.current.pattern, bar) }, `Bar ${bar + 1} cleared. Undo brings it back.`)} disabled={locked || barIsEmpty}>Clear bar</button>
+            <button onClick={() => apply({ ...songRef.current, pattern: emptyPattern() }, 'Beat cleared. Start fresh, or undo to bring it back.')} disabled={locked || notes === 0}>Clear all</button>
           </div>
         </div>
 
           </section>
-          <section hidden={panel !== 'drums'} className="studio-presets"><span>Starting grooves</span>{presets.map(({ id, label }) => <button className="secondary-button" key={id} onClick={() => apply({ ...songRef.current, pattern: createPreset(id) }, `${label} loaded. Your vocal layers and mix are kept.`)}>{label}</button>)}</section>
+          <section hidden={panel !== 'drums'} className="studio-presets"><span>Starting grooves</span>{presets.map(({ id, label }) => <button className="secondary-button" disabled={locked} key={id} onClick={() => apply({ ...songRef.current, pattern: createPreset(id) }, `${label} loaded. Your vocal layers and mix are kept.`)}>{label}</button>)}</section>
         </fieldset>
       </div>
       <aside className="studio-sidebar">
-        <fieldset disabled={locked} className="mixer-panel"><div className="panel-title"><h2>Song mix</h2><span>Saved with your song</span></div>
+        <fieldset disabled={locked} className="mixer-panel"><div className="panel-title"><h2>{game ? "Your part’s mix" : "Song mix"}</h2><span>Saved with your song</span></div>
           <Level label="Beat volume" value={song.mix.beat} onChange={beat => apply({ ...songRef.current, mix: { ...songRef.current.mix, beat } }, 'Beat volume saved in your mix.')} />
           <Level label="Piano volume" value={song.piano.volume} onChange={volume => apply({ ...songRef.current, piano: { ...songRef.current.piano, volume } }, 'Piano volume saved.')} />
           <Level label="Voice volume" value={song.mix.voice} onChange={voice => apply({ ...songRef.current, mix: { ...songRef.current.mix, voice } }, 'Voice volume saved in your mix.')} />
-          <p className="panel-hint">Everyone hears these levels in the results.</p>
+          <p className="panel-hint">These levels are saved for this section.</p>
         </fieldset>
         <fieldset hidden={panel !== 'vocals'} disabled={locked} className="clip-inspector"><div className="panel-title"><h2>Vocal sample</h2></div>
           {selectedClip ? <>
@@ -209,7 +232,7 @@ export default function Studio({ active, hasLobby, game, onHome }: { onHome: () 
       </aside>
     </div>
     {error && <p role="alert" className="error">{error}</p>}
-    <footer className="page-footer"><p role="status">{message}</p><p>{game ? 'Recordings are shared with the room in results.' : 'Sandbox · Edits reset on refresh'}</p></footer>
+    <footer className="page-footer"><p role="status">{message}</p><p>{game ? 'Earlier sections are preserved · Your section extends the song.' : 'Sandbox · Edits reset on refresh'}</p></footer>
   </main>
 }
 

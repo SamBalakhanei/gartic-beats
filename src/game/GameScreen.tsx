@@ -19,10 +19,10 @@ export default function GameScreen({ onHome, isHost, hostName, hostConnected, ga
   const [revision, setRevision] = useState(0)
   const revisionRef = useRef(savedRevision)
   const draftTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  useEffect(() => () => clearTimeout(draftTimer.current), [game.phase])
+  useEffect(() => () => clearTimeout(draftTimer.current), [game.phase, game.round])
   const localDeadline = useRef<number | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
-  useEffect(() => { heading.current?.focus() }, [game.phase])
+  useEffect(() => { heading.current?.focus() }, [game.phase, game.round])
   useEffect(() => {
     localDeadline.current = game.deadline === null ? null : Date.now() + (game.deadline - game.serverNow)
     const update = () => setSeconds(localDeadline.current === null ? 600 : Math.max(0, Math.ceil((localDeadline.current - Date.now()) / 1000)))
@@ -32,37 +32,37 @@ export default function GameScreen({ onHome, isHost, hostName, hostConnected, ga
   }, [game.deadline, game.serverNow])
   const mine = game.mine
   const disabled = !connected || pending
-  const progress = `${game.completed} / ${game.total} ${game.phase === 'prompts' ? 'prompts' : 'songs'} submitted`
+  const progress = `${game.completed} / ${game.total} ${game.phase === 'prompts' ? 'prompts' : 'parts'} submitted`
   const connectionNote = connected ? '' : 'Connection lost. Reconnecting… Keep this tab open to preserve your recordings.'
 
   if (game.phase === 'music' && game.audioPending) return <main className="app home-app"><Brand onHome={onHome} /><h1>Recovering your recordings…</h1><p role="status">Waiting for another player’s copy. Keep the other tabs open. If no connected player has a copy, these recordings cannot be recovered.</p><p>{notice}</p></main>
 
   if (game.phase === 'music' && mine) {
     const locked = disabled || mine.submitted || seconds === 0
-    return <Studio onHome={onHome} active hasLobby game={{
-      initialSong: mine.song, prompt: mine.prompt ?? '', disabled: locked,
-      toolbar: <div className="round-toolbar"><div><strong>{mine.submitted ? 'Song submitted. Waiting for the others…' : 'One prompt. One song. Make it yours.'}</strong><p>{progress}</p></div><span className="round-clock" aria-label="Time remaining">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>{connectionNote && <p role="status">{connectionNote}</p>}{notice && <p role="status">{notice}</p>}</div>,
-      saveStatus: mine.submitted ? 'Submitted — your song is locked in.' : !connected ? 'Offline — editing paused until you reconnect.' : seconds === 0 ? 'Time is up. Opening results…' : revision > savedRevision ? 'Saving…' : 'Arrangement saved · Keep this tab open while audio is shared.',
+    return <Studio key={`${game.id}:${game.round}`} onHome={onHome} active hasLobby game={{
+      initialSong: mine.song, prompt: mine.prompt, disabled: locked,
+      toolbar: <div className="round-toolbar"><div><strong>{mine.submitted ? 'Part submitted. Waiting for the others…' : `Round ${game.round} of ${game.rounds} · Add your part, then pass it on.`}</strong><p>{progress}</p></div><span className="round-clock" aria-label="Time remaining">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>{connectionNote && <p role="status">{connectionNote}</p>}{notice && <p role="status">{notice}</p>}</div>,
+      saveStatus: mine.submitted ? 'Submitted — your part is locked in.' : !connected ? 'Offline — editing paused until you reconnect.' : seconds === 0 ? 'Time is up. Passing the song on…' : revision > savedRevision ? 'Saving…' : 'Arrangement saved · Keep this tab open while audio is shared.',
       onSongChange: (song: Song) => {
         const next = ++revisionRef.current
         setRevision(next)
         clearTimeout(draftTimer.current)
-        draftTimer.current = setTimeout(() => saveDraft({ gameId: game.id, song, revision: next }), 200)
+        draftTimer.current = setTimeout(() => saveDraft({ gameId: game.id, round: game.round, song, revision: next }), 200)
       },
-      onSubmit: song => { clearTimeout(draftTimer.current); send('submit_song', { gameId: game.id, song }) },
+      onSubmit: song => { clearTimeout(draftTimer.current); send('submit_song', { gameId: game.id, round: game.round, song }) },
     }} />
   }
 
-  return <main className="app home-app">
+  return <main className={`app home-app ${game.phase === 'results' ? 'reveal-page' : ''}`}>
     <header className="brand-row"><Brand onHome={onHome} /></header>
-    <section className="home-intro"><p className="eyebrow">{game.phase === 'results' ? 'The listening party' : 'It starts with an idea'}</p><h1 ref={heading} tabIndex={-1}>{game.phase === 'results' ? 'Hear what happened.' : 'Write something worth a beat.'}</h1><p>{game.phase === 'results' ? 'One song at a time. The host leads the listening party.' : 'Give someone a scene, a mood, or something ridiculous. Your prompt will go to another player.'}</p></section>
+    <section className="home-intro"><p className="eyebrow">{game.phase === 'results' ? 'The listening party' : 'It starts with an idea'}</p><h1 ref={heading} tabIndex={-1}>{game.phase === 'results' ? 'Hear what happened.' : 'Write something worth a beat.'}</h1><p>{game.phase === 'results' ? 'Watch each idea unfold, one message and one player’s section at a time. The host leads the reveal.' : 'Give someone a scene, a mood, or something ridiculous. Your prompt will go to another player.'}</p></section>
     {game.phase === 'results' ? <Results game={game} isHost={isHost} hostName={hostName} hostConnected={hostConnected} connected={connected} pending={pending} send={send} /> : mine ? <section className="home-card">
-      {mine.promptSubmitted ? <><h2>Prompt submitted!</h2><p>Waiting for everyone to finish writing. Your 10 minutes starts when all prompts are ready.</p></> : <form className="prompt-form" onSubmit={event => { event.preventDefault(); send('prompt', { gameId: game.id, prompt }) }}>
+      {mine.promptSubmitted ? <><h2>Prompt submitted!</h2><p>Waiting for everyone to finish writing. Each music turn lasts up to 10 minutes. Only the first musician sees your prompt.</p></> : <form className="prompt-form" onSubmit={event => { event.preventDefault(); send('prompt', { gameId: game.id, prompt }) }}>
         <label htmlFor="game-prompt">Your prompt</label><textarea id="game-prompt" maxLength={MAX_PROMPT_LENGTH} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder="A raccoon breaking into a nightclub" rows={4} required disabled={disabled} />
         <span>{prompt.length} / {MAX_PROMPT_LENGTH}</span><button className="play-button" disabled={disabled || !prompt.trim()}>Submit prompt</button>
       </form>}
       <p role="status">{progress}</p>
     </section> : <p>This round is already underway. You can listen when the results are ready.</p>}
-    <footer className="page-footer"><p role="status">{connectionNote || notice}</p><p>One song per player</p></footer>
+    <footer className="page-footer"><p role="status">{connectionNote || notice}</p><p>One new part per round · Follow the music</p></footer>
   </main>
 }

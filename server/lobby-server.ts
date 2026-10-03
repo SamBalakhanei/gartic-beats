@@ -35,7 +35,8 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000, musicD
     const previousPhase = room.game.phase
     finishIfReady(room.game, Date.now())
     if (room.game.phase !== previousPhase) broadcast(room)
-    if (room.game.phase === 'music' && !room.gameTimer) {
+    clearTimeout(room.gameTimer); room.gameTimer = undefined
+    if (room.game.phase === 'music') {
       room.gameTimer = setTimeout(() => {
         finishIfReady(room.game!, Date.now())
         room.gameTimer = undefined
@@ -147,7 +148,7 @@ export function attachLobbyServer(server: EventEmitter, graceMs = 30_000, musicD
         try {
           if (message.gameId !== game.id) throw new Error('This request belongs to a different game.')
           if (message.type === 'prompt') submitPrompt(game, current.player.id, message.prompt, Date.now(), musicDuration)
-          else saveSong(game, current.player.id, message.song, message.type === 'submit_song', Date.now())
+          else saveSong(game, current.player.id, message.song, message.type === 'submit_song', Date.now(), false, Number(message.round))
           syncGame(current.room)
           if (message.type === 'draft') {
             send(socket, { type: 'draft_saved', revision: typeof message.revision === 'number' ? message.revision : 0 })

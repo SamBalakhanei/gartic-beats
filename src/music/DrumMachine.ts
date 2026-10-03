@@ -22,6 +22,7 @@ export class DrumMachine {
   private disposed = false
   private volume = 0.65
   private bpm = DEFAULT_BPM
+  private layers: Song[] = []
   private piano: PianoTrack = emptyPiano()
   private pianoBus: GainNode | null = null
   private pianoBuffers = new Map<string, AudioBuffer>()
@@ -54,12 +55,15 @@ export class DrumMachine {
   }
 
   setSong(song: Song) {
+    this.layers = song.layers ?? []
     this.piano = song.piano ?? emptyPiano()
     if (this.context) this.pianoBus?.gain.setTargetAtTime(this.piano.volume, this.context.currentTime, 0.015)
     this.setPattern(song.pattern)
     this.setBpm(song.bpm)
     this.setMix(song.mix ?? DEFAULT_MIX, songVocals(song))
   }
+
+  get needsInteraction() { return this.context?.state === 'suspended' }
 
   async prepare() { await this.ready() }
 
@@ -113,36 +117,38 @@ export class DrumMachine {
     return buffer
   }
 
-  private hit(id: Instrument, at: number) {
+  private hit(id: Instrument, at: number, level?: number) {
     const source = this.context!.createBufferSource()
     source.buffer = this.buffers.get(id)!
-    source.connect(this.beatBus!)
+    const gain = level === undefined ? null : this.context!.createGain()
+    if (gain) { gain.gain.value = level!; source.connect(gain); gain.connect(this.output!) }
+    else source.connect(this.beatBus!)
     this.sources.add(source)
-    source.onended = () => { source.disconnect(); this.sources.delete(source) }
+    source.onended = () => { source.disconnect(); gain?.disconnect(); this.sources.delete(source) }
     source.start(at)
   }
 
-  private pianoHit(note: PianoNote, at: number, preview = false) {
+  private pianoHit(note: PianoNote, at: number, preview = false, track = this.piano, backing = false) {
     const context = this.context!
-    const midi = noteMidi(this.piano, note.degree)
+    const midi = noteMidi(track, note.degree)
     const remaining = (64 - note.start) * 15 / this.bpm
     const gate = Math.min(note.length * 15 / this.bpm * 0.9, remaining)
-    const key = `${midi}:${gate}:${this.piano.warmth}`
+    const key = `${midi}:${gate}:${track.warmth}`
     let buffer = this.pianoBuffers.get(key)
     if (!buffer) {
-      const samples = synthesizePiano(midi, context.sampleRate, gate, this.piano.warmth)
+      const samples = synthesizePiano(midi, context.sampleRate, gate, track.warmth)
       buffer = context.createBuffer(1, samples.length, context.sampleRate)
       buffer.getChannelData(0).set(samples)
       if (this.pianoBuffers.size >= 128) this.pianoBuffers.clear()
       this.pianoBuffers.set(key, buffer)
     }
     const source = context.createBufferSource(), gain = context.createGain()
-    source.buffer = buffer; gain.gain.value = note.velocity * 0.75
-    source.connect(gain); gain.connect(this.pianoBus!)
+    source.buffer = buffer; gain.gain.value = note.velocity * 0.75 * (backing ? track.volume : 1)
+    source.connect(gain); gain.connect(backing ? this.output! : this.pianoBus!)
     this.sources.add(source)
     source.onended = () => { source.disconnect(); gain.disconnect(); this.sources.delete(source) }
     source.start(at)
-    if (!preview) source.stop(at + Math.min(buffer.duration, remaining - (note.start % 2 ? this.piano.swing * 15 / this.bpm : 0)))
+    if (!preview) source.stop(at + Math.min(buffer.duration, remaining - (note.start % 2 ? track.swing * 15 / this.bpm : 0)))
   }
   async previewPiano(degree: number) {
     const generation = this.generation
@@ -156,31 +162,32 @@ export class DrumMachine {
     if (!this.disposed && generation === this.generation) this.hit(id, context.currentTime)
   }
 
-  async start(song?: Song) {
+  async start(song?: Song, section?: number) {
     this.stop()
     if (song) this.setSong(song)
     const generation = this.generation
     const context = await this.ready()
     if (this.disposed || generation !== this.generation || document.hidden) return
     const buffers = new Map<string, AudioBuffer>()
-    await Promise.all(this.vocals.map(async clip => {
-      buffers.set(clip.id, await context.decodeAudioData(voiceBytes(clip.voice.data).buffer as ArrayBuffer))
+    await Promise.all([...this.vocals, ...this.layers.flatMap(songVocals)].map(async clip => {
+      buffers.set(clip.voice.data, await context.decodeAudioData(voiceBytes(clip.voice.data).buffer as ArrayBuffer))
     }))
     if (this.disposed || generation !== this.generation || document.hidden) return
     const origin = context.currentTime + 0.04
-    const clock = new StepClock(origin, TOTAL_STEPS)
-    const playClip = (clip: VocalClip, at: number) => {
-      const buffer = buffers.get(clip.id)
+    const sectionOffset = section === undefined ? 0 : Math.max(0, Math.min(this.layers.length, section))
+    const clock = new StepClock(origin, TOTAL_STEPS * (section === undefined ? this.layers.length + 1 : 1))
+    const playClip = (clip: VocalClip, at: number, backingLevel?: number) => {
+      const buffer = buffers.get(clip.voice.data)
       if (!buffer) return
       const source = context.createBufferSource()
       const gain = context.createGain()
       const timing = clipTiming(clip, this.bpm)
       source.buffer = buffer
       source.playbackRate.value = timing.rate
-      gain.gain.value = clip.volume
-      source.connect(gain); gain.connect(this.voiceBus!)
+      gain.gain.value = clip.volume * (backingLevel ?? 1)
+      source.connect(gain); gain.connect(backingLevel === undefined ? this.voiceBus! : this.output!)
       const gains = this.vocalGains.get(clip.id) ?? new Set<GainNode>()
-      gains.add(gain); this.vocalGains.set(clip.id, gains)
+      if (backingLevel === undefined) { gains.add(gain); this.vocalGains.set(clip.id, gains) }
       this.sources.add(source)
       source.onended = () => { source.disconnect(); gain.disconnect(); gains.delete(gain); this.sources.delete(source) }
       source.start(at, timing.offset)
@@ -188,17 +195,26 @@ export class DrumMachine {
       source.stop(at + timing.audibleSeconds)
     }
     const schedule = () => {
-      for (const { at, step } of clock.schedule(context.currentTime, this.bpm)) {
-        for (const note of this.piano.notes) if (note.start === step) this.pianoHit(note, at + (step % 2 ? this.piano.swing * 15 / this.bpm : 0))
-        for (const clip of this.vocals) if (Math.floor(clip.startStep) === step) playClip(clip, at + (clip.startStep % 1) * 15 / this.bpm)
-        for (const { id } of instruments) {
-          if (this.pattern[id][step]) this.hit(id, at)
+      for (const { at, step: position } of clock.schedule(context.currentTime, this.bpm)) {
+        const index = sectionOffset + Math.floor(position / TOTAL_STEPS)
+        const step = position % TOTAL_STEPS
+        const earlier = this.layers[index]
+        if (earlier) {
+          const mix = earlier.mix ?? DEFAULT_MIX
+          if (earlier.piano) for (const note of earlier.piano.notes) if (note.start === step) this.pianoHit(note, at + (step % 2 ? earlier.piano.swing * 15 / this.bpm : 0), false, earlier.piano, true)
+          for (const clip of songVocals(earlier)) if (Math.floor(clip.startStep) === step) playClip(clip, at + (clip.startStep % 1) * 15 / this.bpm, mix.voice)
+          for (const { id } of instruments) if (earlier.pattern[id][step]) this.hit(id, at, mix.beat)
+        } else {
+          for (const note of this.piano.notes) if (note.start === step) this.pianoHit(note, at + (step % 2 ? this.piano.swing * 15 / this.bpm : 0))
+          for (const clip of this.vocals) if (Math.floor(clip.startStep) === step) playClip(clip, at + (clip.startStep % 1) * 15 / this.bpm)
+          for (const { id } of instruments) if (this.pattern[id][step]) this.hit(id, at)
         }
       }
     }
     let previous = -1
     const animate = () => {
-      const step = clock.position(context.currentTime)
+      const position = clock.position(context.currentTime)
+      const step = position < 0 ? -1 : sectionOffset * TOTAL_STEPS + position
       if (step !== previous) { this.onStep(step); previous = step }
       this.frame = requestAnimationFrame(animate)
     }

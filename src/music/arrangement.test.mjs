@@ -103,6 +103,40 @@ test('shared playback engine overlaps layers with saved pitch and independent ga
   }
   assert.deepEqual(pianoSnapshots[0], pianoSnapshots[1])
 
+  // Earlier contributions play first, then the new section on the same clock.
+  const chainEngine = new DrumMachine(song.pattern, () => {}, () => {})
+  engines.push(chainEngine)
+  const earlier = { ...song, piano: { ...pianoSong.piano, notes: [pianoSong.piano.notes[0]] } }
+  const newest = { ...song, layers: [earlier], mix: { beat: .8, voice: .5 } }
+  await chainEngine.start(newest)
+  const chainContext = contexts.at(-1)
+  const firstVocals = chainContext.sources.filter(source => source.buffer.vocal)
+  assert.equal(firstVocals.length, 2, 'only the earlier section starts at the beginning')
+  assert.ok(firstVocals.every(source => source.at === .04))
+  assert.ok(Math.abs(firstVocals[0].to.gain.value - .7 * .9) < 1e-9)
+  assert.equal(chainContext.sources.find(source => !source.buffer.vocal).at, .04)
+  chainEngine.setMix({ beat: .1, voice: .1 }, [{ ...lead, volume: .1 }, harmony])
+  assert.ok(Math.abs(firstVocals[0].to.gain.value - .7 * .9) < 1e-9)
+  chainContext.currentTime = 7.95
+  tick()
+  const allVocals = chainContext.sources.filter(source => source.buffer.vocal)
+  assert.equal(allVocals.length, 4)
+  assert.ok(Math.abs(allVocals[2].at - 8.04) < 1e-9, 'new part starts eight seconds later')
+  assert.equal(allVocals[2].to.gain.value, .1)
+  assert.equal(allVocals[2].to.to.gain.value, .1)
+  chainContext.currentTime = 15.95
+  tick()
+  assert.ok(Math.abs(chainContext.sources.filter(source => source.buffer.vocal)[4].at - 16.04) < 1e-9, 'the whole arrangement loops')
+  chainEngine.stop()
+
+  // Recording and auditioning the current section starts immediately, not after the history.
+  await chainEngine.start(newest, 1)
+  const ownPreview = chainContext.sources.filter(source => source.buffer.vocal).slice(-2)
+  assert.equal(ownPreview.length, 2)
+  assert.ok(ownPreview.every(source => Math.abs(source.at - 15.99) < 1e-9))
+  assert.equal(ownPreview[0].to.to.gain.value, .5)
+  chainEngine.stop()
+
 })
 
 

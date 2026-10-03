@@ -171,7 +171,8 @@ export function useLobby() {
       let payload = extra
       if (type === 'submit_song' && manager) {
         setNotice('Sharing your recordings with the other players… Keep this tab open.')
-        const song = await manager.prepare(extra.song as Song)
+        const { layers: _backing, ...part } = extra.song as Song
+        const song = await manager.prepare(part)
         // Save metadata before waiting, so timeout results retain the latest arrangement.
         if (socket.current === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'draft', ...extra, song }))
         await manager.shared(song)
@@ -186,7 +187,8 @@ export function useLobby() {
     const ws = socket.current, manager = peers.current
     if (ws?.readyState !== WebSocket.OPEN || !manager || sending.current) return false
     transferQueue.current = transferQueue.current.catch(() => {}).then(async () => {
-      const song = await manager.prepare(extra.song as Song)
+      const { layers: _backing, ...part } = extra.song as Song
+      const song = await manager.prepare(part)
       if (socket.current === ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'draft', ...extra, song }))
     }).catch(error => { if (socket.current === ws) setNotice(error instanceof Error ? error.message : 'Draft could not be saved.') })
     return true

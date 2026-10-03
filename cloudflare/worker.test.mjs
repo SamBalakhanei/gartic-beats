@@ -44,18 +44,18 @@ test('Cloudflare runtime: authenticated rooms, readiness, metadata-only songs, r
     assert.equal(music.room.game.mine.prompt, 'Guest secret')
     assert.equal(music.room.game.results.length, 0)
     const song = { pattern: emptyPattern(), bpm: 120, voice: { data: 'p2p:' + 'f'.repeat(64), bpm: 120 } }
-    host.send({ type: 'draft', gameId, song: { ...song, voice: { data: 'base64-audio', bpm: 120 } } })
+    host.send({ type: 'draft', round: 1, gameId, song: { ...song, voice: { data: 'base64-audio', bpm: 120 } } })
     assert.match((await host.wait(m => m.type === 'error')).message, /reference/)
-    host.send({ type: 'draft', gameId, song, revision: 42 })
+    host.send({ type: 'draft', round: 1, gameId, song, revision: 42 })
     assert.equal((await host.wait(m => m.type === 'draft_saved')).revision, 42)
     await mf.unsafeEvictDurableObject('test', 'Room', { name: room, webSockets: 'hibernate' })
-    host.send({ type: 'draft', gameId, song, revision: 43 })
+    host.send({ type: 'draft', round: 1, gameId, song, revision: 43 })
     assert.equal((await host.wait(m => m.type === 'draft_saved')).revision, 43)
     host.ws.close(); await new Promise(r => setTimeout(r, 50))
     const resumed = await connect(); resumed.send({ type: 'resume', ...h.session })
     const restored = await resumed.wait(m => m.type === 'joined')
     assert.deepEqual(restored.room.game.mine.song, song)
-    resumed.send({ type: 'submit_song', gameId, song }); guest.send({ type: 'submit_song', gameId, song })
+    resumed.send({ type: 'submit_song', round: 1, gameId, song }); guest.send({ type: 'submit_song', round: 1, gameId, song })
     const result = await resumed.wait(m => m.type === 'room' && m.room.game?.phase === 'results')
     assert.equal(result.room.game.results.length, 1)
     guest.send({ type: 'reveal', gameId, action: 'next', revision: 0 })
@@ -66,4 +66,50 @@ test('Cloudflare runtime: authenticated rooms, readiness, metadata-only songs, r
     const moved = await guest.wait(m => m.type === 'room' && m.room.hostId === g.session.playerId)
     assert.equal(moved.room.players.length, 1)
   } finally { for (const ws of sockets) try { ws.close() } catch {} await mf.dispose() }
+})
+
+
+test('Cloudflare rotates private chains, rejects stale rounds and restores large rooms after hibernation', async () => {
+  const mf = new Miniflare(convertV4MiniflareOptions({ name: 'chains', modules: true, scriptPath: 'dist/beat_telephone/index.js', compatibilityDate: '2026-10-01', compatibilityFlags: ['nodejs_compat'], durableObjects: { ROOMS: { className: 'Room', useSQLite: true } } }))
+  const room = 'b'.repeat(32), clients = [], sessions = []
+  try {
+    for (let i = 0; i < 3; i++) {
+      const response = await mf.dispatchFetch('http://localhost/lobby?room=' + room, { headers: { Upgrade: 'websocket', Origin: 'http://localhost' } })
+      const c = client(response.webSocket); clients.push(c)
+      c.send({ type: i === 0 ? 'create' : 'join', name: `Player ${i}` })
+      sessions.push((await c.wait(m => m.type === 'joined')).session)
+    }
+    clients.forEach((c, i) => c.send({ type: 'peers', peers: sessions.filter((_, j) => i !== j).map(s => s.playerId) }))
+    await clients[0].wait(m => m.type === 'room' && m.room.players.length === 3 && m.room.players.every(p => p.peerReady))
+    clients[0].send({ type: 'start' })
+    const gameId = (await clients[0].wait(m => m.type === 'room' && m.room.game?.phase === 'prompts')).room.game.id
+    clients.forEach((c, i) => c.send({ type: 'prompt', gameId, prompt: `SECRET ${i}` }))
+    await clients[0].wait(m => m.type === 'room' && m.room.game?.round === 1)
+    const song = { pattern: emptyPattern(), bpm: 95, piano: { root: 0, mode: 'major', volume: .6, warmth: .7, swing: .1, notes: Array.from({ length: 512 }, (_, i) => ({ id: String(i).padStart(64, 'x'), start: i % 64, degree: i % 8, length: 1, velocity: .7 })) } }
+    assert.ok(JSON.stringify(song).length * 3 > 128 * 1024)
+    clients.forEach(c => c.send({ type: 'submit_song', gameId, round: 1, song }))
+    const second = (await clients[0].wait(m => m.type === 'room' && m.room.game?.round === 2)).room.game
+    assert.equal(second.mine.prompt, null)
+    assert.ok(!JSON.stringify(second).includes('SECRET'))
+    assert.deepEqual(second.mine.song.layers, [song])
+    clients[0].send({ type: 'draft', gameId, round: 1, song })
+    assert.match((await clients[0].wait(m => m.type === 'error')).message, /ended/)
+    await mf.unsafeEvictDurableObject('chains', 'Room', { name: room, webSockets: 'hibernate' })
+    clients[0].send({ type: 'draft', gameId, round: 2, song, revision: 15 })
+    assert.equal((await clients[0].wait(m => m.type === 'draft_saved')).revision, 15)
+    clients.forEach(c => c.send({ type: 'submit_song', gameId, round: 2, song }))
+    const final = (await clients[0].wait(m => m.type === 'room' && m.room.game?.phase === 'results')).room.game
+    assert.equal(final.revealTotal, 9)
+    for (let revision = 0; revision < 2; revision++) {
+      clients[0].send({ type: 'reveal', gameId, action: 'next', revision })
+      await clients[0].wait(m => m.type === 'room' && m.room.game?.reveal.index === revision + 1)
+    }
+    await mf.unsafeEvictDurableObject('chains', 'Room', { name: room, webSockets: 'hibernate' })
+    clients[0].send({ type: 'reveal', gameId, action: 'play', revision: 2 })
+    const revealed = (await clients[0].wait(m => m.type === 'room' && m.room.game?.reveal.revision === 3)).room.game.results[0]
+    assert.equal(revealed.contribution, 2)
+    assert.equal(revealed.song.layers, undefined)
+    assert.deepEqual(revealed.song.piano, song.piano)
+    assert.equal(revealed.prompt, 'SECRET 0')
+  } finally { for (const c of clients) try { c.ws.close() } catch {} await mf.dispose() }
 })

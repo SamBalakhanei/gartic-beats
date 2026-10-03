@@ -25,9 +25,22 @@ export default {
 
 export class Room extends DurableObject<Env> {
   private room: State | undefined
+  private storedChunks = 0
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
-    ctx.blockConcurrencyWhile(async () => { this.room = await ctx.storage.get<State>('room') })
+    ctx.blockConcurrencyWhile(async () => {
+      const stored = await ctx.storage.get<State | { chunks: number }>('room')
+      if (stored && 'chunks' in stored) {
+        this.storedChunks = stored.chunks
+        const chunks = await ctx.storage.get<string>(Array.from({ length: stored.chunks }, (_, i) => `room:${i}`))
+        this.room = JSON.parse(Array.from({ length: stored.chunks }, (_, i) => chunks.get(`room:${i}`)).join('')) as State
+      } else this.room = stored
+      // An old single-song game cannot resume using the new round protocol.
+      if (this.room?.game && !Array.isArray(this.room.game.order)) {
+        this.room = undefined
+        await ctx.storage.deleteAll()
+      }
+    })
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'))
   }
   private sockets() { return this.ctx.getWebSockets().filter(ws => ws.readyState === 1) }
@@ -45,8 +58,16 @@ export class Room extends DurableObject<Env> {
     for (const p of this.room.players) { const ws = this.socket(p.id); if (ws) this.send(ws, { type: 'room', room: this.snapshot(p.id) }) }
   }
   private async persist() {
-    if (this.room) await this.ctx.storage.put('room', this.room)
-    else await this.ctx.storage.delete('room')
+    const json = this.room ? JSON.stringify(this.room) : ''
+    // At most 64 KiB of UTF-8 per chunk, even for non-ASCII prompts and names.
+    const chunks = Array.from({ length: Math.ceil(json.length / 16000) }, (_, i) => json.slice(i * 16000, (i + 1) * 16000))
+    await this.ctx.storage.transaction(async storage => {
+      for (let i = 0; i < chunks.length; i++) await storage.put(`room:${i}`, chunks[i])
+      for (let i = chunks.length; i < this.storedChunks; i++) await storage.delete(`room:${i}`)
+      if (this.room) await storage.put('room', { chunks: chunks.length })
+      else await storage.delete('room')
+    })
+    this.storedChunks = chunks.length
     await this.schedule()
   }
   private async schedule() {
@@ -155,7 +176,7 @@ export class Room extends DurableObject<Env> {
       } else if (['prompt', 'draft', 'submit_song'].includes(String(m.type))) {
         if (!room.game || m.gameId !== room.game.id) throw new Error('Wrong game.')
         if (m.type === 'prompt') submitPrompt(room.game, a.playerId, m.prompt, Date.now())
-        else saveSong(room.game, a.playerId, m.song, m.type === 'submit_song', Date.now(), true)
+        else saveSong(room.game, a.playerId, m.song, m.type === 'submit_song', Date.now(), true, Number(m.round))
       } else throw new Error('Unknown request.')
       await this.persist()
       if (m.type === 'draft') this.send(ws, { type: 'draft_saved', revision: Number.isSafeInteger(m.revision) ? m.revision : 0 })

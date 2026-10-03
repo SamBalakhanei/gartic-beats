@@ -4,9 +4,9 @@ import { clipTiming, editClipGesture } from './arrangement'
 import type { ClipEdit, VocalClip } from './arrangement'
 import { voiceBytes } from './voice'
 
-type Props = { clip: VocalClip; index: number; beatBpm: number; selected: boolean; step: number; disabled: boolean; snap: boolean; onSelect: () => void; onEdit: (patch: VocalClip) => void }
+type Props = { clip: VocalClip; index: number; beatBpm: number; selected: boolean; step: number; disabled: boolean; selectable?: boolean; snap: boolean; onSelect: () => void; onEdit: (patch: VocalClip) => void }
 
-export default function VocalLane({ clip, index, beatBpm, selected, step, disabled, snap, onSelect, onEdit }: Props) {
+export default function VocalLane({ clip, index, beatBpm, selected, step, disabled, selectable = false, snap, onSelect, onEdit }: Props) {
   const surface = useRef<HTMLDivElement>(null)
   const gesture = useRef<{ mode: ClipEdit; x: number; width: number; original: VocalClip; next: VocalClip; pointer: number; scroll: number } | null>(null)
   const [preview, setPreview] = useState<VocalClip | null>(null)
@@ -60,7 +60,7 @@ export default function VocalLane({ clip, index, beatBpm, selected, step, disabl
   const sourceDuration = 960 / clip.voice.bpm
   const visibleSource = timing.audibleSeconds * timing.rate
   return <div className={`timeline-lane vocal-lane ${selected ? 'selected' : ''} ${preview ? 'is-editing' : ''}`} style={{ '--vocal-color': ['#bba4ff', '#82dfed', '#ffad73', '#ff96b1'][index] } as CSSProperties}>
-    <button disabled={disabled} className="lane-label" aria-pressed={selected} onClick={onSelect}><strong>{clip.name}</strong><small>{clip.bpm} BPM · {Math.round(clip.volume * 100)}%</small></button>
+    <button disabled={disabled && !selectable} className="lane-label" aria-pressed={selected} onClick={onSelect}><strong>{clip.name}</strong><small>{clip.bpm} BPM · {Math.round(clip.volume * 100)}%</small></button>
     <div ref={surface} className="lane-surface">
       <div className="editable-region" style={{ left: `${shown.startStep / 64 * 100}%`, width: `${timing.widthPercent}%` }}>
         <button {...handlers('move')} className="clip-body" aria-label={`Move ${clip.name}`} title="Drag to move · Arrow keys to nudge · Shift for fine placement">

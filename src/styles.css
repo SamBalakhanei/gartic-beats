@@ -364,3 +364,47 @@ select:focus-visible { outline: 3px solid #f4f2ff; outline-offset: 3px; }
 .game-studio-prompt .eyebrow { margin-bottom: 10px; }
 .game-studio-prompt h1 { max-width: 36ch; margin: 0 auto; font-size: clamp(1.4rem, 3vw, 2.3rem); line-height: 1.3; letter-spacing: -0.025em; overflow-wrap: anywhere; }
 @media (max-width: 760px) { .game-studio-prompt { margin: 14px 0 18px; padding: 16px; } }
+
+/* Compact, horizontally scrollable arrangement navigation for telephone rounds. */
+.song-sections { margin: 0 0 16px; padding: 14px; border: 1px solid #444552; border-radius: 12px; background: #1e1f2a; }
+.section-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.section-heading span, .song-sections p { color: #c6c4d6; font-size: .85rem; }
+.song-sections p { margin: 10px 0 0; }
+.section-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.section-card { flex: 1 0 180px; max-width: 260px; text-align: left; display: grid; gap: 6px; padding: 12px; background: #292a37; border: 2px solid #444552; border-radius: 8px; color: #f3f2f8; }
+.section-card[aria-pressed=true] { border-color: #bba4ff; background: #332c46; }
+.section-card.sounding { box-shadow: inset 0 -3px #c2ff8a; }
+.section-card span, .section-card small { font-size: .75rem; color: #c6c4d6; }
+.section-mini { display: flex; gap: 3px; height: 16px; }
+.section-mini i { flex: 1; background: #444552; border-radius: 2px; }
+.section-mini i.filled { background: #c2ff8a; }
+
+/* Each prompt has its own stationary conversation; slots are reserved before reveal. */
+.reveal-conversation { padding: 14px; border: 1px solid #444552; border-radius: 14px; background: #191a24; }
+.conversation-prompt { min-height: 92px; padding: 12px 16px; border: 1px solid #554566; border-radius: 10px; background: #302a42; }
+.conversation-prompt blockquote { margin: 8px 0 0; font-size: 1.05rem; line-height: 1.4; overflow-wrap: anywhere; }
+.message-author { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.message-author strong { overflow-wrap: anywhere; }
+.message-author span { color: #bbb8cc; font-size: .8rem; }
+.message-author small { color: #c2ff8a; margin-left: auto; }
+.conversation-parts { list-style: none; display: grid; gap: 8px; padding: 0; margin: 12px 0; }
+.conversation-parts.many-parts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.conversation-part { display: flex; gap: 10px; align-items: center; min-height: 64px; padding: 9px 12px; border: 1px solid #424351; border-radius: 0 10px 10px 10px; background: #252631; }
+.conversation-part article { min-width: 0; flex: 1; }
+.part-number { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 28px; background: #39304f; border-radius: 8px; color: #dfd2ff; font-size: .8rem; }
+.conversation-part p { margin: 4px 0 0; color: #b9b8cb; font-size: .75rem; }
+.conversation-part.is-unrevealed { border-style: dashed; background: transparent; color: #aaa7bb; }
+.reveal-conversation .is-current { border-color: #c2ff8a; }
+.conversation-status { min-height: 2.6em; margin: 8px 0 0; color: #c2ff8a; font-size: .8rem; line-height: 1.3; }
+.reveal-sound { display: flex; justify-content: flex-end; margin-top: 8px; }
+.reveal-stage progress { margin: 8px 0 12px; }
+.reveal-controls { margin: 10px 0; }
+.reveal-page .home-intro { margin: 16px 0; }
+.reveal-page .home-intro h1 { font-size: 1.8rem; margin: 6px 0; }
+.reveal-page .home-intro > p:not(.eyebrow) { display: none; }
+.reveal-page > .page-footer { margin-top: 10px; }
+@media (max-width: 480px) {
+  .conversation-parts.many-parts { grid-template-columns: minmax(0, 1fr); }
+  .reveal-conversation { padding: 10px; }
+  .conversation-part { min-height: 54px; padding: 7px 10px; }
+}

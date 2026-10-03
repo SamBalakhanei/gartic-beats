@@ -28,3 +28,13 @@ test('references reject malformed identifiers and tempo, and preserve multi-laye
   const wire = await manifest(input, (id, track) => cache.set(id, track))
   assert.deepEqual(hydrate(validateSong(wire, true), id => cache.get(id)), input)
 })
+
+
+test('a rotated song restores audio from every locked contribution and waits for missing copies', async () => {
+  const cache = new Map()
+  const input = { pattern: emptyPattern(), bpm: 120, layers: [song, { ...song, mix: { beat: .2, voice: .4 } }] }
+  const wire = await manifest(input, (id, track) => cache.set(id, track))
+  assert.equal(wire.layers[0].voice.data.startsWith('p2p:'), true)
+  assert.equal(hydrate(wire, () => undefined), null)
+  assert.deepEqual(hydrate(wire, id => cache.get(id)), input)
+})

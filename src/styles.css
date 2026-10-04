@@ -476,7 +476,7 @@ select:focus-visible { outline: 3px solid #f4f2ff; outline-offset: 3px; }
   .landing-hero, .landing-bottom { grid-template-columns: minmax(0,1fr); gap: 26px; }
   .landing-hero { padding: 28px 0; }
   .landing-story h1 { font-size: clamp(2rem, 7.5vw, 2.8rem); }
-  .idea-demo { display: none; }
+  .idea-demo { margin-top: 24px; }
   .landing-description { margin-top: 16px; }
   .landing-page .lobby-card { box-shadow: 5px 5px 0 #bba4ff12; }
   .landing-bottom { padding-top: 28px; }
@@ -518,3 +518,20 @@ select:focus-visible { outline: 3px solid #f4f2ff; outline-offset: 3px; }
 .landing-sandbox p:not(.eyebrow), .landing-sandbox > small { color: #bab2c9; }
 .sandbox-cta { background: transparent; border: 1px solid #76648f; }
 .landing-sandbox h2 { font-size: 1.5rem; }
+
+/* Explain the telephone rule in the example, including on small screens. */
+.demo-prompt { flex-wrap: wrap; gap: 8px 12px; }
+.demo-prompt p { flex: 1; min-width: 160px; }
+.demo-prompt small { font-family: inherit; font-size: .7rem; }
+.demo-part > span { display: block; font: 500 .65rem/1.45 system-ui, sans-serif; }
+.demo-part strong { font-size: .8rem; }
+.demo-part small { font-size: .73rem; line-height: 1.45; opacity: 1; }
+.demo-footnote { font-size: .8rem; line-height: 1.5; color: #bfbcca; }
+.demo-footnote strong { color: #eee8fa; }
+@media (max-width: 480px) {
+  .demo-song { grid-template-columns: minmax(0, 1fr); }
+  .demo-part { padding: 10px 12px; }
+  .demo-wave { display: none; }
+  .demo-part strong { margin-top: 4px; }
+  .demo-prompt small { flex-basis: 100%; margin-left: 0; }
+}

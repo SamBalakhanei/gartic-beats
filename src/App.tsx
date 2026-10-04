@@ -50,22 +50,27 @@ export default function App() {
         </header>
         <div className="landing-hero">
           <section className="landing-story">
-            <p className="landing-kicker"><span aria-hidden="true" /> A music party for your group chat</p>
-            <h1 ref={heading} tabIndex={-1}>{lobby ? <>Your band.<br /><em>Assemble.</em></> : <>The music game<br /><em>for your group chat.</em></>}</h1>
-            <p className="landing-description">{lobby ? 'Send the invite. Get everyone in. Let the questionable musical decisions begin.' : 'Create a private game for 2–8 friends. Turn silly prompts into songs, take turns adding a section, then reveal what everyone made.'}</p>
+            <p className="landing-kicker"><span aria-hidden="true" /> An online music telephone game</p>
+            <h1 ref={heading} tabIndex={-1}>{lobby ? <>Your room is ready.<br /><em>Invite your friends.</em></> : <>Pass the song.<br /><em>Lose the plot.</em></>}</h1>
+            <p className="landing-description">{lobby ? 'Share your room link. Everyone writes a prompt, then takes turns making music for someone else’s idea.' : 'A free party game where friends turn silly prompts into songs, one section at a time. Only the first musician sees the prompt. Everyone else has to follow what they hear.'}</p>
             <div className="hero-game-row"><button className="hero-game-button" onClick={() => { if (lobby) roomPanel.current?.focus(); else nameInput.current?.focus() }}>{lobby ? 'Your lobby' : invite ? 'Join game' : 'Create game'} <span aria-hidden="true">→</span></button><span>{lobby ? 'Invite your friends and get ready.' : invite ? 'Your friends are waiting.' : 'Start a room. Share the link.'}<br />No accounts needed.</span></div>
             <div className="landing-facts"><span>2–8 friends</span><span>Free to play</span><span>No musical skills required</span></div>
-            <div className="idea-demo" aria-label="Example: a cat in a jazz club becomes a song made by three friends">
-              <div className="demo-caption"><span>ONE IDEA. EVERYONE’S SOUND.</span><span aria-hidden="true">↘</span></div>
-              <div className="demo-prompt"><span aria-hidden="true">✳</span><p>“A cat sneaking into<br />a jazz club.”</p><small>the prompt</small></div>
-              <div className="demo-song" aria-hidden="true">
-                {[['01', 'The entrance', 'sneaky drums'], ['02', 'The plot twist', 'a piano detour'], ['03', 'The finale', 'questionable vocals']].map(([number, name, detail], index) => <div className={`demo-part demo-part-${index}`} key={number}><span>{number}</span><div className="demo-wave">{Array.from({ length: 15 }, (_, i) => <i key={i} style={{ height: `${20 + ((i * 17 + index * 23) % 70)}%` }} />)}</div><strong>{name}</strong><small>{detail}</small></div>)}
+            <div className="idea-demo" role="group" aria-label="Example of one song passing between friends">
+              <div className="demo-caption"><span>ONE WAY YOUR SONG COULD GO</span><span aria-hidden="true">↘</span></div>
+              <div className="demo-prompt"><span aria-hidden="true">✳</span><p>“A cat sneaking into a jazz club.”</p><small>Someone’s prompt</small></div>
+              <div className="demo-song">
+                {[
+                  ['01', 'Alex starts it', 'Sees the prompt', 'Starts with soft piano and slow vocals'],
+                  ['02', 'Sam takes over', 'Only hears the music', 'Picks up the energy with a fast beat and rap'],
+                  ['03', 'Jo goes next', 'Only hears the music', 'Switches to dreamy synths and a sung chorus'],
+                ].map(([number, name, clue, detail], index) => <div className={`demo-part demo-part-${index}`} key={number}><span>{number} · {clue}</span><div className="demo-wave" aria-hidden="true">{Array.from({ length: 15 }, (_, i) => <i key={i} style={{ height: `${20 + ((i * 17 + index * 23) % 70)}%` }} />)}</div><strong>{name}</strong><small>{detail}</small></div>)}
               </div>
-              <p className="demo-footnote">Nobody knows where this is going. That’s the point.</p>
+              <p className="demo-footnote"><strong>Every section is yours to make.</strong> Mix any instruments, record vocals, or do both. No assigned roles.</p>
+              <p className="demo-footnote"><strong>Then the reveal:</strong> see the original prompt and hear each friend’s part together.</p>
             </div>
           </section>
           <section ref={roomPanel} tabIndex={-1} className="home-card lobby-card" aria-labelledby="lobby-title">
-            <div className="card-heading"><h2 id="lobby-title">{lobby ? 'The green room' : invite ? 'You’re on the guest list.' : 'Get the band together.'}</h2>{lobby && <span className="badge">{lobby.players.length} / {MAX_PLAYERS} players</span>}</div>
+            <div className="card-heading"><h2 id="lobby-title">{lobby ? 'Your lobby' : invite ? 'Join your friends.' : 'Start a game with friends.'}</h2>{lobby && <span className="badge">{lobby.players.length} / {MAX_PLAYERS} players</span>}</div>
             {lobby ? <>
               <p className="card-note" role="status">{status}</p>
               <label className="invite-label" htmlFor="invite-link">Invite friends</label>
@@ -88,7 +93,7 @@ export default function App() {
                 send(invite ? 'join' : 'create', { name: guestName, roomId: invite })
               }}>
                 <label htmlFor="guest-name">Your name</label>
-                <div className="guest-input-row"><input ref={nameInput} id="guest-name" value={guestName} onChange={event => setGuestName(event.target.value)} maxLength={24} placeholder="Your stage name" autoComplete="nickname" required /></div>
+                <div className="guest-input-row"><input ref={nameInput} id="guest-name" value={guestName} onChange={event => setGuestName(event.target.value)} maxLength={24} placeholder="Enter your name" autoComplete="nickname" required /></div>
                 <button className="play-button home-primary" disabled={!connected || pending || !guestName.trim()} type="submit">{pending ? 'Connecting…' : invite ? 'Join lobby' : 'Create game →'}</button>
               </form>
               {invite && <button className="text-button" disabled={pending} onClick={clearInvite}>Create a different lobby</button>}
@@ -97,10 +102,10 @@ export default function App() {
           </section>
         </div>
         <section className="landing-bottom" id="how-to-play" aria-label="How to play and sandbox">
-          <div className="landing-how"><p className="eyebrow">The less serious side of making music</p><h2>One prompt. A group effort.</h2><ol>
-            <li><span>01</span><div><strong>Start something silly.</strong><p>Everyone writes a prompt. Someone else makes the opening section.</p></div></li>
-            <li><span>02</span><div><strong>Follow your ears.</strong><p>The prompt disappears. Listen to the song so far and add what comes next.</p></div></li>
-            <li><span>03</span><div><strong>Hear what happened.</strong><p>Reveal the original idea and everyone’s contribution. Blame your friends.</p></div></li>
+          <div className="landing-how"><p className="eyebrow">How to play</p><h2>Everyone creates. Nobody knows the ending.</h2><ol>
+            <li><span>01</span><div><strong>Write a funny prompt.</strong><p>Everyone writes an idea. Each goes to a different player, who makes the first section with drums, piano, or their voice.</p></div></li>
+            <li><span>02</span><div><strong>Pass the song, hide the prompt.</strong><p>Each round, listen to another song and make its next section. Everyone works on a different song at the same time.</p></div></li>
+            <li><span>03</span><div><strong>Reveal it with your friends.</strong><p>The host walks everyone through the prompts and each player’s part. Find out how far the music wandered from the idea.</p></div></li>
           </ol></div>
           <aside className="landing-sandbox" aria-labelledby="sandbox-title"><span className="sandbox-symbol" aria-hidden="true">♫</span><p className="eyebrow">Want to practice first?</p><h2 id="sandbox-title">Try the instruments.</h2><p>Get comfortable with drums, piano, and recording before your next game.</p><a className="sandbox-cta" href="#sandbox">Practice in Sandbox <span aria-hidden="true">↗</span></a><small>No room needed. No pressure.</small></aside>
         </section>
